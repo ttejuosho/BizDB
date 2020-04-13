@@ -1,0 +1,30 @@
+{
+  "name": "chamberLink",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thomasbyoung/chamberLink.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/thomasbyoung/chamberLink/issues"
+  },
+  "homepage": "https://github.com/thomasbyoung/chamberLink#readme",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "event-stream": "^4.0.1",
+    "express": "^4.17.1",
+    "method-override": "^3.0.0",
+    "mysql2": "^2.1.0",
+    "neat-csv": "^5.2.0",
+    "nodemon": "^2.0.2",
+    "sequelize": "^5.21.6"
+  }
+}
