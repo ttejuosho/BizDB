@@ -9,11 +9,12 @@ router.get('/', (req,res) => {
 });
 
 router.get('/index', (req,res) => {
-    db.Business.findAll({})
-    .then( function(add){
-        console.log(add);
+    res.render('index');
+    // db.Business.findAll({})
+    // .then( function(add){
+    //     console.log(add);
         
-    });
+    // });
 });
 
 module.exports = router;

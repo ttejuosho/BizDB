@@ -1,7 +1,7 @@
 var express = require("express");
 var bodyParser = require("body-parser");
-
-
+var methodOverride = require("method-override");
+var exphbs = require("express-handlebars");
 // bring in the models
 var db = require("./models");
 
@@ -13,10 +13,18 @@ app.use(bodyParser.urlencoded({
   extended: false
 }));
 
+// override with POST having ?_method=DELETE
+app.use(methodOverride("_method"));
+
+app.engine("handlebars", exphbs({
+  defaultLayout: "main"
+}));
+
+app.set("view engine", "handlebars");
+
 var routes = require("./controllers/bizDb_controller");
 
 require("./routes/api-routes.js")(app);
-
 
 app.use("/", routes);
 var port = process.env.PORT || 3000;
