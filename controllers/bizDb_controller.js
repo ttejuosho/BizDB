@@ -4,17 +4,20 @@ var router = express.Router();
 // grabbing our models
 var db = require("../models");
 
-router.get('/', (req,res) => {
-    res.redirect('/index');
+router.get("/", (req, res) => {
+  res.redirect("/index");
 });
 
-router.get('/index', (req,res) => {
-    res.render('index');
-    // db.Business.findAll({})
-    // .then( function(add){
-    //     console.log(add);
-        
-    // });
+router.get("/index", (req, res) => {
+  db.Business.count().then((dbCount) => {
+    return res.render("index", { count: dbCount });
+  });
+
+  // db.Business.findAll({})
+  // .then( function(add){
+  //     console.log(add);
+
+  // });
 });
 
 module.exports = router;

@@ -20,6 +20,57 @@ module.exports = function (app) {
     });
   });
 
+  app.delete("/api/deleteBusiness/:id", (req, res) => {
+    db.Business.destroy({
+      where: {
+        id: req.params.id,
+      },
+    }).then((dbBusiness) => {
+      res.json(dbBusiness);
+    });
+  });
+
+  app.get("/api/getBusiness/:id",(req,res)=>{
+    db.Business.findByPk(req.params.id).then((dbBusiness)=>{
+      res.json(dbBusiness);
+    });
+  });
+
+  app.post("/api/saveBusiness", (req, res) => {
+    db.Business.findOne({
+      where: {
+        Company: req.body.Company,
+        Contact: req.body.Contact,
+        Email: req.body.Email
+      },
+    }).then((dbBusiness) => {
+      if (dbBusiness == null) {
+        db.Business.create({
+          Company: req.body.Company,
+          Address: req.body.Address,
+          City: req.body.City,
+          State: req.body.State,
+          Zip: req.body.Zip,
+          County: req.body.County,
+          Phone: req.body.Phone,
+          Website: req.body.Website,
+          Contact: req.body.Contact,
+          Title: req.body.Title,
+          Direct_Phone: req.body.Direct_Phone,
+          Email: req.body.Email,
+          Sales: req.body.Sales,
+          Employees: req.body.Employees,
+          SIC_Code: req.body.SIC_Code,
+          Industry: req.body.Industry,
+        }).then((dbBusiness) => {
+          res.json(dbBusiness);
+        });
+      } else {
+        res.json("Business Already Exists");
+      }
+    });
+  });
+
   app.get("/api/getBusinesses", (req, res) => {
     db.Business.findAll({}).then((dbBusiness) => {
       res.json(dbBusiness);
@@ -129,6 +180,35 @@ module.exports = function (app) {
       .on("end", () => {
         console.log("Read File Successfull");
         resp.write(badCount + " records were not inserted.");
+      });
+  });
+
+  app.get("/api/search/:searchQuery", (req, res) => {
+    const Op = Sequelize.Op;
+    const searchQuery = req.params.searchQuery;
+    const requestStart = Date.now();
+    db.Business.findAll({
+      where: {
+        [Op.or]: {
+          Company: { [Op.like]: "%" + searchQuery + "%" },
+          Address: { [Op.like]: "%" + searchQuery + "%" },
+          City: { [Op.like]: "%" + searchQuery + "%" },
+          State: { [Op.like]: "%" + searchQuery + "%" },
+          Zip: { [Op.like]: "%" + searchQuery + "%" },
+          County: { [Op.like]: "%" + searchQuery + "%" },
+          Contact: { [Op.like]: "%" + searchQuery + "%" },
+          Phone: { [Op.like]: "%" + searchQuery + "%" },
+          Industry: { [Op.like]: "%" + searchQuery + "%" },
+        },
+      },
+    })
+      .then((dbBusiness) => {
+        const processingTime = Date.now() - requestStart;
+        var data = { results: dbBusiness, processingTime: processingTime };
+        res.json(data);
+      })
+      .catch(function (err) {
+        res.render("error", err);
       });
   });
 
