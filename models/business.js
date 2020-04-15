@@ -1,55 +1,53 @@
-const Sequelize = require('sequelize');
-
 module.exports = function(sequelize, DataTypes) {
     const Business = sequelize.define("Business", {
       Company: {
-        type: Sequelize.STRING,
+        type: DataTypes.STRING,
         allowNull: false
       },
       Address: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       City: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       State: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Zip: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       County: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Phone: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Contact: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Title: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Direct_Phone: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Email: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Website: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Sales: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Employees: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       SIC_Code: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       },
       Industry: {
-        type: Sequelize.STRING
+        type: DataTypes.STRING
       }
     });
     
