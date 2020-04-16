@@ -123,6 +123,27 @@ module.exports = function (app) {
     });
   });
 
+  app.get("/api/getBusinesses/:pageNumber", (req, res) => {
+    let limit = 50;
+    let offset = 0;
+    db.Business.findAndCountAll().then((dbCount) => {
+
+      let page = req.params.pageNumber;      // page number
+      let pages = Math.ceil(dbCount.count / limit);
+      offset = limit * (page - 1);
+
+      db.Business.findAll({
+        limit: limit,
+        offset: offset,
+        $sort: { id: 1 }
+      }).then((data)=>{
+        res.status(200).json({ count: dbCount.count, pages: pages, data: data });
+      }); 
+    }).catch(function (error) {
+      res.status(500).send('Internal Server Error');
+    });
+  });
+
   app.get("/api/loadFileData", (req, resp) => {
     var badCount = 0;
     var s = fs
