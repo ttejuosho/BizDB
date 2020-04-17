@@ -30,8 +30,8 @@ module.exports = function (app) {
     });
   });
 
-  app.get("/api/getBusiness/:id",(req,res)=>{
-    db.Business.findByPk(req.params.id).then((dbBusiness)=>{
+  app.get("/api/getBusiness/:id", (req, res) => {
+    db.Business.findByPk(req.params.id).then((dbBusiness) => {
       res.json(dbBusiness);
     });
   });
@@ -41,7 +41,7 @@ module.exports = function (app) {
       where: {
         Company: req.body.Company,
         Contact: req.body.Contact,
-        Email: req.body.Email
+        Email: req.body.Email,
       },
     }).then((dbBusiness) => {
       if (dbBusiness == null) {
@@ -126,22 +126,25 @@ module.exports = function (app) {
   app.get("/api/getBusinesses/:pageNumber", (req, res) => {
     let limit = 50;
     let offset = 0;
-    db.Business.findAndCountAll().then((dbCount) => {
+    db.Business.findAndCountAll()
+      .then((dbCount) => {
+        let page = req.params.pageNumber; // page number
+        let pages = Math.ceil(dbCount.count / limit);
+        offset = limit * (page - 1);
 
-      let page = req.params.pageNumber;      // page number
-      let pages = Math.ceil(dbCount.count / limit);
-      offset = limit * (page - 1);
-
-      db.Business.findAll({
-        limit: limit,
-        offset: offset,
-        $sort: { id: 1 }
-      }).then((data)=>{
-        res.status(200).json({ count: dbCount.count, pages: pages, data: data });
-      }); 
-    }).catch(function (error) {
-      res.status(500).send('Internal Server Error');
-    });
+        db.Business.findAll({
+          limit: limit,
+          offset: offset,
+          $sort: { id: 1 },
+        }).then((data) => {
+          res
+            .status(200)
+            .json({ count: dbCount.count, pages: pages, data: data });
+        });
+      })
+      .catch(function (error) {
+        res.status(500).send("Internal Server Error");
+      });
   });
 
   app.get("/api/loadFileData", (req, resp) => {
@@ -153,44 +156,55 @@ module.exports = function (app) {
         es.mapSync((business) => {
           var businessArray = business.split('","');
           if (businessArray.length === 16) {
-          businessArray[0] = businessArray[0].substring(1, businessArray[0].length);
-          businessArray[15] = businessArray[15].substring(0, businessArray[15].length - 1);
-          var cleanObj = {
-            Company: businessArray[0],
-            Address: businessArray[1],
-            City: businessArray[2],
-            State: businessArray[3],
-            Zip: businessArray[4],
-            County: businessArray[5],
-            Phone: businessArray[6],
-            Website: businessArray[7],
-            Contact: businessArray[8],
-            Title: businessArray[9],
-            Direct_Phone: businessArray[10],
-            Email: businessArray[11],
-            Sales: businessArray[12],
-            Employees: businessArray[13],
-            SIC_Code: businessArray[14],
-            Industry: businessArray[15],
-          };
+            businessArray[0] = businessArray[0].substring(
+              1,
+              businessArray[0].length
+            );
+            businessArray[15] = businessArray[15].substring(
+              0,
+              businessArray[15].length - 1
+            );
+            var cleanObj = {
+              Company: businessArray[0],
+              Address: businessArray[1],
+              City: businessArray[2],
+              State: businessArray[3],
+              Zip: businessArray[4],
+              County: businessArray[5],
+              Phone: businessArray[6],
+              Website: businessArray[7],
+              Contact: businessArray[8],
+              Title: businessArray[9],
+              Direct_Phone: businessArray[10],
+              Email: businessArray[11],
+              Sales: businessArray[12],
+              Employees: businessArray[13],
+              SIC_Code: businessArray[14],
+              Industry: businessArray[15],
+            };
 
-          db.Business.create(cleanObj).catch(function (err) {
-            resp.write("<p>Failed to save " + cleanObj.Company + " data to the db</p>");
-            console.log(err);
-          });
-          resp.write(
-            "<p>" +
-              cleanObj.Company +
-              " has been saved to the database.</p>"
-          );
-
-          } else {
-            fs.appendFile('missed.csv', businessArray.toString() + '\n', function (err) {
-              if (err) {
-              console.log('Couldnt write ' + businessArray.toString() + ' to File.');
-              return console.log(err);
-            }
+            db.Business.create(cleanObj).catch(function (err) {
+              resp.write(
+                "<p>Failed to save " + cleanObj.Company + " data to the db</p>"
+              );
+              console.log(err);
             });
+            resp.write(
+              "<p>" + cleanObj.Company + " has been saved to the database.</p>"
+            );
+          } else {
+            fs.appendFile(
+              "missed.csv",
+              businessArray.toString() + "\n",
+              function (err) {
+                if (err) {
+                  console.log(
+                    "Couldnt write " + businessArray.toString() + " to File."
+                  );
+                  return console.log(err);
+                }
+              }
+            );
             badCount++;
           }
         })
@@ -225,7 +239,7 @@ module.exports = function (app) {
     })
       .then((dbBusiness) => {
         const processingTime = Date.now() - requestStart;
-        var data = { results: dbBusiness, processingTime: processingTime };
+        var data = { processingTime: processingTime + 'seconds', rowCount: dbBusiness.length, results: dbBusiness };
         res.json(data);
       })
       .catch(function (err) {
@@ -233,4 +247,26 @@ module.exports = function (app) {
       });
   });
 
+  app.get("/api/advsearch/:searchBy/:searchQuery", (req, res) => {
+    const Op = Sequelize.Op;
+    const searchBy = req.params.searchBy;
+    const searchQuery = req.params.searchQuery;
+    const searchObj = {};
+    searchObj[searchBy] = { [Op.like]: "%" + searchQuery + "%" }
+    const requestStart = Date.now();
+    
+    db.Business.findAll({
+      where: {
+        [Op.or]: searchObj,
+      },
+    }).then((dbBusiness) => {
+      const processingTime = Date.now() - requestStart;
+      var data = { processingTime: processingTime + 'seconds', rowCount: dbBusiness.length, results: dbBusiness };
+      res.json(data);
+    })
+    .catch(function (err) {
+      res.render("error", err);
+    });
+
+  });
 };
