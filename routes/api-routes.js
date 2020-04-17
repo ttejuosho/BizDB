@@ -239,7 +239,7 @@ module.exports = function (app) {
     })
       .then((dbBusiness) => {
         const processingTime = Date.now() - requestStart;
-        var data = { processingTime: processingTime + 'seconds', rowCount: dbBusiness.length, results: dbBusiness };
+        var data = { processingTime: processingTime/1000 + 'seconds', rowCount: dbBusiness.length, results: dbBusiness };
         res.json(data);
       })
       .catch(function (err) {
@@ -261,7 +261,7 @@ module.exports = function (app) {
       },
     }).then((dbBusiness) => {
       const processingTime = Date.now() - requestStart;
-      var data = { processingTime: processingTime + 'seconds', rowCount: dbBusiness.length, results: dbBusiness };
+      var data = { processingTime: processingTime/1000 + 'seconds', rowCount: dbBusiness.length, results: dbBusiness };
       res.json(data);
     })
     .catch(function (err) {
