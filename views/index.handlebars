@@ -1,45 +1,44 @@
-<!-- Header -->
-<header class="bg-primary py-5 mb-5">
-  <div class="container h-100">
-    <div class="row h-100 align-items-center">
-      <div class="col-lg-12">
-        <h1 class="display-4 text-white mt-5 mb-2">Search Chicago Businesses</h1>
-        {{!-- <small id="passwordHelpBlock" class="form-text text-muted">Search chicago businesses by any keyword</small> --}}
-        <p class="lead mb-5 text-white-50">Search chicago businesses by any keyword in our {{count}} records database
-        </p>
-        <form>
-          <div class="form-row">
-            <div class="col-12 col-md-9 mb-2 mb-md-0">           
-              <select id="searchBy" class="form-control form-control-lg mb-2" name="searchBy">
-                <option value="All">All</option>
-                <option value="Company">Company Name</option>
-                <option value="Address">Address</option>
-                <option value="City">City</option>
-                <option value="State">State (Enter 2 letter state code)</option>
-                <option value="Zip">Zip Code</option>
-                <option value="County">County</option>
-                <option value="Phone">Phone Number</option>
-                <option value="Contact">Contact</option>
-              </select>
-              <input type="text" id="searchQuery" class="form-control form-control-lg mb-2" placeholder="Search">
-              <button type="button" class="btn btn-block btn-lg btn-warning" id="goSearch">Search</button>
-              <p id="searchInfo" class="mt-3"></p>
-            </div>
-            <div class="col-12 col-md-3">
-              {{!-- <button type="button" class="btn btn-block btn-lg btn-warning" id="goSearch">Search</button> --}}
-            </div>
-          </div>
-        </form>
-      </div>
+<main role="main">
+
+    <!-- Main jumbotron for a primary marketing message or call to action -->
+    <div class="jumbotron">
+        <div class="container">
+            <h1 class="display-3">Chicago Businesses Database</h1>
+            <p>Search chicago businesses by any keyword in our {{count}} records database</p>
+            <form>
+                <div class="form-row">
+                    <div class="col-12 col-md-6 mb-2 mb-md-0">
+                        <select id="searchBy" class="form-control mb-2" name="searchBy">
+                            <option value="All">All</option>
+                            <option value="Company">Company Name</option>
+                            <option value="Address">Address</option>
+                            <option value="City">City</option>
+                            <option value="State">State (Enter 2 letter state code)</option>
+                            <option value="Zip">Zip Code</option>
+                            <option value="County">County</option>
+                            <option value="Phone">Phone Number</option>
+                            <option value="Contact">Contact</option>
+                            <option value="Email">Email</option>
+                            <option value="Website">Website</option>
+                        </select>
+                        <input type="text" id="searchQuery" class="form-control mb-2" placeholder="Search">
+                        <button type="button" class="btn btn-block btn-lg btn-dark" id="goSearch">Search</button>
+                        <p id="searchInfo" class="mt-3"></p>
+                    </div>
+                </div>
+            </form>
+
+        </div>
     </div>
-  </div>
-</header>
 
-<div class="container">
-  <div class="row" id="resultsDiv">
+    <div class="container">
+        <div class="row" id="resultsDiv">
+            <!-- this will show our spinner -->
+            <div hidden id="spinner"></div>
+        </div>
+    </div> <!-- /container -->
+</main>
 
-  </div>
-</div>
 <script type="text/javascript">
   $("#goSearch").click(() => {
     loadBusinessData();
@@ -74,24 +73,27 @@
 
   function loadBusinessData() {
     event.preventDefault();
+    $('#spinner').removeAttr('hidden');
     var apiUrl = '/api/advsearch/' + $('#searchBy').val() + '/' + $('#searchQuery').val().trim();
 
-    if($('#searchBy').val() === "All"){
+    if ($('#searchBy').val() === "All") {
       apiUrl = '/api/search/' + $('#searchQuery').val().trim()
     }
 
     fetch(apiUrl).then((data) => {
       return data.json();
     }).then((res) => {
-      console.log('Returned ' + res.rowCount + 'rows in ' + res.processingTime);
-      console.log(res.results);
       $('#resultsDiv').empty();
       res.results.forEach((business) => {
         $('#resultsDiv').append(appendHTML(business));
       });
+
       $('#searchInfo').text('Returned ' + res.rowCount + (res.rowCount === 1 ? ' result ' : ' results') + ' in ' + res.processingTime);
+    }).then(() => {
+      $('#spinner').attr('hidden', true);
+    }).catch((err) => {
+      console.log(err);
     });
   }
-
 
 </script>

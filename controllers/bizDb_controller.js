@@ -12,12 +12,6 @@ router.get("/index", (req, res) => {
   db.Business.count().then((dbCount) => {
     return res.render("index", { count: dbCount });
   });
-
-  // db.Business.findAll({})
-  // .then( function(add){
-  //     console.log(add);
-
-  // });
 });
 
 module.exports = router;
