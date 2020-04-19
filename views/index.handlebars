@@ -9,11 +9,24 @@
         </p>
         <form>
           <div class="form-row">
-            <div class="col-12 col-md-9 mb-2 mb-md-0">
-              <input type="text" id="searchBy" class="form-control form-control-lg" placeholder="Search">
+            <div class="col-12 col-md-9 mb-2 mb-md-0">           
+              <select id="searchBy" class="form-control form-control-lg mb-2" name="searchBy">
+                <option value="All">All</option>
+                <option value="Company">Company Name</option>
+                <option value="Address">Address</option>
+                <option value="City">City</option>
+                <option value="State">State (Enter 2 letter state code)</option>
+                <option value="Zip">Zip</option>
+                <option value="County">County</option>
+                <option value="Phone">Phone</option>
+                <option value="Contact">Contact</option>
+              </select>
+              <input type="text" id="searchQuery" class="form-control form-control-lg mb-2" placeholder="Search">
+              <button type="button" class="btn btn-block btn-lg btn-warning" id="goSearch">Search</button>
+              <p id="searchInfo" class="mt-3"></p>
             </div>
             <div class="col-12 col-md-3">
-              <button type="button" class="btn btn-block btn-lg btn-warning" id="goSearch">Search</button>
+              {{!-- <button type="button" class="btn btn-block btn-lg btn-warning" id="goSearch">Search</button> --}}
             </div>
           </div>
         </form>
@@ -34,41 +47,51 @@
 
   $(document).keypress(function (e) {
     var keycode = (e.keyCode ? e.keyCode : e.which);
-    if (keycode == '13' && $('#searchBy').val().length > 0) {
+    if (keycode == '13' && $('#searchQuery').val().length > 0) {
       loadBusinessData();
     }
   });
 
   function appendHTML(business) {
     var html = '<div class="col-md-8 mb-5">' +
-      '<h2>' + business.Company + '</h2>' +
+      '<h3>' + business.Company + '</h3>' +
       '<hr>' +
-      '<p><strong>Address</strong>: ' + business.Address + ', ' + business.City + ', ' + business.State + ', ' + business.Zip + ', ' + business.County + '</p>' +
-      '<p><strong>Phone</strong>: ' + business.Phone + '</p>' +
-      '<p><strong>Website</strong>: ' + business.Website + '</p>' +
-      '<p><strong>Contact</strong>: ' + business.Contact + '</p>' +
-      '<p><strong>Title</strong>: ' + business.Title + '</p>' +
-      '<p><strong>Direct Phone</strong>: ' + business.Direct_Phone + '</p>' +
-      '<p><strong>Email</strong>: ' + business.Email + '</p>' +
-      '<p><strong>Sales</strong>: ' + business.Sales + '</p>' +
-      '<p><strong>Employees</strong>: ' + business.Employees + '</p>' +
-      '<p><strong>SIC Code</strong>: ' + business.SIC_Code + '</p>' +
-      '<p><strong>Industry</strong>: ' + business.Industry + '</p>' +
+      '<p class="mb-1"><strong>Address</strong>: ' + business.Address + ', ' + business.City + ', ' + business.State + ', ' + business.Zip + '</p>' +
+      '<p class="mb-1"><strong>County</strong>: ' + business.County + '</p>' +
+      '<p class="mb-1"><strong>Phone</strong>: ' + business.Phone + '</p>' +
+      '<p class="mb-1"><strong>Website</strong>: ' + business.Website + '</p>' +
+      '<p class="mb-1"><strong>Contact</strong>: ' + business.Contact + '</p>' +
+      '<p class="mb-1"><strong>Title</strong>: ' + business.Title + '</p>' +
+      '<p class="mb-1"><strong>Direct Phone</strong>: ' + business.Direct_Phone + '</p>' +
+      '<p class="mb-1"><strong>Email</strong>: ' + business.Email + '</p>' +
+      '<p class="mb-1"><strong>Sales</strong>: ' + business.Sales + '</p>' +
+      '<p class="mb-1"><strong>Employees</strong>: ' + business.Employees + '</p>' +
+      '<p class="mb-1"><strong>SIC Code</strong>: ' + business.SIC_Code + '</p>' +
+      '<p class="mb-1"><strong>Industry</strong>: ' + business.Industry + '</p>' +
       '</div>';
     return html;
   }
 
   function loadBusinessData() {
     event.preventDefault();
-    fetch('/api/search/' + $('#searchBy').val().trim()).then((data) => {
+    var apiUrl = '/api/advsearch/' + $('#searchBy').val() + '/' + $('#searchQuery').val().trim();
+
+    if($('#searchBy').val() === "All"){
+      apiUrl = '/api/search/' + $('#searchQuery').val().trim()
+    }
+
+    fetch(apiUrl).then((data) => {
       return data.json();
     }).then((res) => {
-      console.log(res.processingTime + 'seconds');
+      console.log('Returned ' + res.rowCount + 'rows in ' + res.processingTime);
+      console.log(res.results);
       $('#resultsDiv').empty();
       res.results.forEach((business) => {
         $('#resultsDiv').append(appendHTML(business));
       });
+      $('#searchInfo').text('Returned ' + res.rowCount + (res.rowCount === 1 ? ' result ' : ' results') + ' in ' + res.processingTime);
     });
   }
+
 
 </script>
