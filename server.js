@@ -29,7 +29,7 @@ var routes = require("./controllers/bizDb_controller");
 require("./routes/api-routes.js")(app);
 
 app.use("/", routes);
-app.use("/indexx", routes);
+app.use("/select", routes);
 var port = process.env.PORT || 3000;
 db.sequelize.sync().then(function() {
   app.listen(port);

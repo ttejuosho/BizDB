@@ -271,4 +271,15 @@ module.exports = function (app) {
     });
 
   });
+
+  app.get("/api/search/column/:columnName", (req,res)=>{
+    db.Business.findAll({
+      attributes: [
+          // specify an array where the first element is the SQL function and the second is the alias
+          [Sequelize.fn('DISTINCT', Sequelize.col(req.params.columnName)) ,req.params.columnName],
+      ]
+  }).then(function(dbBusiness) { 
+    res.json(dbBusiness);
+   });
+  });
 };

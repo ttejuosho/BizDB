@@ -14,4 +14,10 @@ router.get("/index", (req, res) => {
   });
 });
 
+router.get("/select", (req, res) => {
+  db.Business.count().then((dbCount) => {
+    return res.render("select", { count: dbCount });
+  });
+});
+
 module.exports = router;
