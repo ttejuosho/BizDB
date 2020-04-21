@@ -182,16 +182,22 @@ module.exports = function (app) {
               SIC_Code: businessArray[14],
               Industry: businessArray[15],
             };
+            if (cleanObj.Company.toLowerCase().includes("chamber")) {
+              db.Business.create(cleanObj).catch(function (err) {
+                resp.write(
+                  "<p>Failed to save " +
+                    cleanObj.Company +
+                    " data to the db</p>"
+                );
+                console.log(err);
+              });
 
-            db.Business.create(cleanObj).catch(function (err) {
               resp.write(
-                "<p>Failed to save " + cleanObj.Company + " data to the db</p>"
+                "<p>" +
+                  cleanObj.Company +
+                  " has been saved to the database.</p>"
               );
-              console.log(err);
-            });
-            resp.write(
-              "<p>" + cleanObj.Company + " has been saved to the database.</p>"
-            );
+            }
           } else {
             fs.appendFile(
               "missed.csv",
@@ -241,7 +247,11 @@ module.exports = function (app) {
     })
       .then((dbBusiness) => {
         const processingTime = Date.now() - requestStart;
-        var data = { processingTime: processingTime/1000 + ' seconds', rowCount: dbBusiness.length, results: dbBusiness };
+        var data = {
+          processingTime: processingTime / 1000 + " seconds",
+          rowCount: dbBusiness.length,
+          results: dbBusiness,
+        };
         res.json(data);
       })
       .catch(function (err) {
@@ -254,32 +264,39 @@ module.exports = function (app) {
     const searchBy = req.params.searchBy;
     const searchQuery = req.params.searchQuery;
     const searchObj = {};
-    searchObj[searchBy] = { [Op.like]: "%" + searchQuery + "%" }
+    searchObj[searchBy] = { [Op.like]: "%" + searchQuery + "%" };
     const requestStart = Date.now();
-    
+
     db.Business.findAll({
       where: {
         [Op.or]: searchObj,
       },
-    }).then((dbBusiness) => {
-      const processingTime = Date.now() - requestStart;
-      var data = { processingTime: processingTime/1000 + ' seconds', rowCount: dbBusiness.length, results: dbBusiness };
-      res.json(data);
     })
-    .catch(function (err) {
-      res.render("error", err);
-    });
-
+      .then((dbBusiness) => {
+        const processingTime = Date.now() - requestStart;
+        var data = {
+          processingTime: processingTime / 1000 + " seconds",
+          rowCount: dbBusiness.length,
+          results: dbBusiness,
+        };
+        res.json(data);
+      })
+      .catch(function (err) {
+        res.render("error", err);
+      });
   });
 
-  app.get("/api/search/column/:columnName", (req,res)=>{
+  app.get("/api/search/column/:columnName", (req, res) => {
     db.Business.findAll({
       attributes: [
-          // specify an array where the first element is the SQL function and the second is the alias
-          [Sequelize.fn('DISTINCT', Sequelize.col(req.params.columnName)) ,req.params.columnName],
-      ]
-  }).then(function(dbBusiness) { 
-    res.json(dbBusiness);
-   });
+        // specify an array where the first element is the SQL function and the second is the alias
+        [
+          Sequelize.fn("DISTINCT", Sequelize.col(req.params.columnName)),
+          req.params.columnName,
+        ],
+      ],
+    }).then(function (dbBusiness) {
+      res.json(dbBusiness);
+    });
   });
 };

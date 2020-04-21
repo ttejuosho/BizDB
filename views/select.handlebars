@@ -109,6 +109,10 @@
                 url: '/api/search/column/' + searchByValue,
                 type: 'GET',
                 dataType: 'json',
+                results: function(response, page){
+                    var data = response;
+                    return { results: data }
+                },
                 processResults: function(response){
                     return {
                         results: $.map(response, (item)=>{
