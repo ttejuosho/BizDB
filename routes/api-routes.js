@@ -20,60 +20,24 @@ module.exports = function (app) {
     });
   });
 
-  app.delete("/api/deleteBusiness/:id", (req, res) => {
-    db.Business.destroy({
-      where: {
-        id: req.params.id,
-      },
-    }).then((dbBusiness) => {
-      res.json(dbBusiness);
-    });
+  app.delete("/api/deleteBusiness/:id/:token", (req, res) => {
+    if (req.params.token === "Xtjui76hafs45sgsj") {
+      db.Business.destroy({
+        where: {
+          id: req.params.id,
+        },
+      }).then((dbBusiness) => {
+        res.json(dbBusiness);
+      });
+    } else {
+      return res.status(401).json("Unauthorized : Token missing or invalid");
+    }
   });
 
-  app.post("/api/updateBusiness/:id", (req,res)=>{
-    db.Business.update({
-      Company: req.body.Company,
-      Address: req.body.Address,
-      City: req.body.City,
-      State: req.body.State,
-      Zip: req.body.Zip,
-      County: req.body.County,
-      Phone: req.body.Phone,
-      Website: req.body.Website,
-      Contact: req.body.Contact,
-      Title: req.body.Title,
-      Direct_Phone: req.body.Direct_Phone,
-      Email: req.body.Email,
-      Sales: req.body.Sales,
-      Employees: req.body.Employees,
-      SIC_Code: req.body.SIC_Code,
-      Industry: req.body.Industry,
-    },
-    {
-      where: {
-        id: req.params.id,
-      },
-    }).then((dbBusiness) => {
-      res.json(dbBusiness);
-    });
-  });
-
-  app.get("/api/getBusiness/:id", (req, res) => {
-    db.Business.findByPk(req.params.id).then((dbBusiness) => {
-      res.json(dbBusiness);
-    });
-  });
-
-  app.post("/api/saveBusiness", (req, res) => {
-    db.Business.findOne({
-      where: {
-        Company: req.body.Company,
-        Contact: req.body.Contact,
-        Email: req.body.Email,
-      },
-    }).then((dbBusiness) => {
-      if (dbBusiness == null) {
-        db.Business.create({
+  app.post("/api/updateBusiness/:id/:token", (req, res) => {
+    if (req.params.token === "Xtjui76hafs45sgsj") {
+      db.Business.update(
+        {
           Company: req.body.Company,
           Address: req.body.Address,
           City: req.body.City,
@@ -90,19 +54,77 @@ module.exports = function (app) {
           Employees: req.body.Employees,
           SIC_Code: req.body.SIC_Code,
           Industry: req.body.Industry,
-        }).then((dbBusiness) => {
-          res.json(dbBusiness);
-        });
-      } else {
-        res.json("Business Already Exists");
-      }
-    });
+        },
+        {
+          where: {
+            id: req.params.id,
+          },
+        }
+      ).then((dbBusiness) => {
+        res.json(dbBusiness);
+      });
+    } else {
+      return res.status(401).json("Unauthorized : Token missing or invalid");
+    }
   });
 
-  app.get("/api/getBusinesses", (req, res) => {
-    db.Business.findAll({}).then((dbBusiness) => {
-      res.json(dbBusiness);
-    });
+  app.get("/api/getBusiness/:id/:token", (req, res) => {
+    if (req.params.token === "Xtjui76hafs45sgsj") {
+      db.Business.findByPk(req.params.id).then((dbBusiness) => {
+        res.json(dbBusiness);
+      });
+    } else {
+      return res.status(401).json("Unauthorized : Token missing or invalid");
+    }
+  });
+
+  app.post("/api/saveBusiness/:token", (req, res) => {
+    if (req.params.token === "Xtjui76hafs45sgsj") {
+      db.Business.findOne({
+        where: {
+          Company: req.body.Company,
+          Contact: req.body.Contact,
+          Email: req.body.Email,
+        },
+      }).then((dbBusiness) => {
+        if (dbBusiness == null) {
+          db.Business.create({
+            Company: req.body.Company,
+            Address: req.body.Address,
+            City: req.body.City,
+            State: req.body.State,
+            Zip: req.body.Zip,
+            County: req.body.County,
+            Phone: req.body.Phone,
+            Website: req.body.Website,
+            Contact: req.body.Contact,
+            Title: req.body.Title,
+            Direct_Phone: req.body.Direct_Phone,
+            Email: req.body.Email,
+            Sales: req.body.Sales,
+            Employees: req.body.Employees,
+            SIC_Code: req.body.SIC_Code,
+            Industry: req.body.Industry,
+          }).then((dbBusiness) => {
+            res.json(dbBusiness);
+          });
+        } else {
+          res.json("Business Already Exists");
+        }
+      });
+    } else {
+      return res.status(401).json("Unauthorized : Token missing or invalid");
+    }
+  });
+
+  app.get("/api/getBusinesses/:token", (req, res) => {
+    if (req.params.token === "Xtjui76hafs45sgsj") {
+      db.Business.findAll({}).then((dbBusiness) => {
+        res.json(dbBusiness);
+      });
+    } else {
+      return res.status(401).json("Unauthorized : Token missing or invalid");
+    }
   });
 
   app.get("/api/loadCSV/", (req, res) => {
