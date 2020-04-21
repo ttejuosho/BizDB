@@ -30,7 +30,7 @@ module.exports = function (app) {
     });
   });
 
-  app.put("/api/updateBusiness/:id", (req,res)=>{
+  app.post("/api/updateBusiness/:id", (req,res)=>{
     db.Business.update({
       Company: req.body.Company,
       Address: req.body.Address,
