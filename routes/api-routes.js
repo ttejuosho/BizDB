@@ -30,6 +30,34 @@ module.exports = function (app) {
     });
   });
 
+  app.put("/api/updateBusiness/:id", (req,res)=>{
+    db.Business.update({
+      Company: req.body.Company,
+      Address: req.body.Address,
+      City: req.body.City,
+      State: req.body.State,
+      Zip: req.body.Zip,
+      County: req.body.County,
+      Phone: req.body.Phone,
+      Website: req.body.Website,
+      Contact: req.body.Contact,
+      Title: req.body.Title,
+      Direct_Phone: req.body.Direct_Phone,
+      Email: req.body.Email,
+      Sales: req.body.Sales,
+      Employees: req.body.Employees,
+      SIC_Code: req.body.SIC_Code,
+      Industry: req.body.Industry,
+    },
+    {
+      where: {
+        id: req.params.id,
+      },
+    }).then((dbBusiness) => {
+      res.json(dbBusiness);
+    });
+  });
+
   app.get("/api/getBusiness/:id", (req, res) => {
     db.Business.findByPk(req.params.id).then((dbBusiness) => {
       res.json(dbBusiness);
