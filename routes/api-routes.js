@@ -252,6 +252,7 @@ module.exports = function (app) {
       });
   });
 
+  // This method does Multi-Column Search
   app.get("/api/search/:searchQuery", (req, res) => {
     const Op = Sequelize.Op;
     const searchQuery = req.params.searchQuery;
@@ -287,6 +288,8 @@ module.exports = function (app) {
       });
   });
 
+  // The Get searches specified columns 
+  // searchBy is the column name && searchQuery is the value searchFor
   app.get("/api/advsearch/:searchBy/:searchQuery", (req, res) => {
     const Op = Sequelize.Op;
     const searchBy = req.params.searchBy;
@@ -314,16 +317,18 @@ module.exports = function (app) {
       });
   });
 
+  // Gets all the values in the specified columns
   app.get("/api/search/column/:columnName", (req, res) => {
     db.Business.findAll({
       attributes: [
         // specify an array where the first element is the SQL function and the second is the alias
-        [ Sequelize.fn("DISTINCT", Sequelize.col(req.params.columnName)), "text" ],
-        [ "id", "id" ],
+        [ Sequelize.fn("DISTINCT", Sequelize.col(req.params.columnName)), 'value' ],
+        //[ "id", "id" ],
 
       ],
     }).then(function (dbBusiness) {
       res.json(dbBusiness);
     });
   });
+  
 };
