@@ -16,7 +16,7 @@
     xhr.ontimeout = function () {
         console.error("request timedout: ", xhr);
     }
-    xhr.open("get", "https://auctiondata.iaai.com/Search?AccessKey=faa3f7d8-932e-42bf-9a61-2b2cf379ad75", /*async*/ true);
+    
     xhr.send();
     $('.navbar').addClass('mb-0');
     $('body').addClass('pt-0');
