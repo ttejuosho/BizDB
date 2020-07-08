@@ -4,6 +4,8 @@ const Op = Sequelize.Op;
 const neatCsv = require("neat-csv");
 const fs = require("fs");
 var es = require("event-stream");
+var moment = require("moment");
+var request = require("request");
 
 // Routes
 // =============================================================
@@ -145,7 +147,7 @@ module.exports = function (app) {
     });
   });
 
-  app.get("/api/recordCount", (req, res) => {
+  app.get("/api/bizRecordCount", (req, res) => {
     db.Business.findAndCountAll().then((dbCount) => {
       res.json(dbCount.count + " records in db");
     });
@@ -178,7 +180,7 @@ module.exports = function (app) {
   app.get("/api/loadFileData", (req, resp) => {
     var badCount = 0;
     var s = fs
-      .createReadStream("8613.csv")
+      .createReadStream("8615.csv")
       .pipe(es.split())
       .pipe(
         es.mapSync((business) => {
@@ -331,4 +333,257 @@ module.exports = function (app) {
     });
   });
   
+  app.get("/api/autoRecordCount", (req, res) => {
+    db.Vehicle.findAndCountAll().then((dbCount) => {
+      res.json(dbCount.count + " records in auto db");
+    });
+  });
+
+  app.get("/api/loadAutos", (req, resp) => {
+    var badCount = 0;
+    var s = fs
+      .createReadStream("salesdata0.csv")
+      .pipe(es.split())
+      .pipe(
+        es.mapSync((vehicle) => {
+          var vehicleArray = vehicle.split(',');
+          var vArray = [];
+          for(var i = 0; i < vehicleArray.length; i++){
+            if(vehicleArray[i].split('')[0] == '"'){
+              var itemArray = vehicleArray[i].split('');
+              itemArray.pop();
+              itemArray.shift();
+              vArray.push(itemArray.join(''));
+            } else {
+              vArray.push(vehicleArray[i]);
+            }
+          }
+
+          //console.log(vArray);
+          var vehicleObj = {
+            Vehicle_Id: parseFloat(vArray[0]),
+            Yard_Number: parseFloat(vArray[1]),
+            Yard_Name: vArray[2],
+            Sale_Date: moment(vArray[3]).format("MMM Do, YYYY HH:mm a"),
+            Day_of_Week: vArray[4],
+            Sale_Time_HHMM: moment(vArray[5]).format("HH:mm"),
+            Time_Zone: vArray[6],
+            Item_Number: parseFloat(vArray[7]),
+            Lot_Number: parseFloat(vArray[8]),
+            Vehicle_Type: vArray[9],
+            Year: parseFloat(vArray[10]),
+            Make: vArray[11],
+            Model_Group: vArray[12],
+            Model_Details: vArray[13],
+            Body_Style: vArray[14],
+            Color: vArray[15],
+            Damage_Description: vArray[16],
+            Secondary_Damage: vArray[17],
+            Sale_Title_State: vArray[18],
+            Sale_Title_Type: vArray[19],
+            Has_Keys: vArray[20],
+            Lot_Condition_Code: vArray[21],
+            VIN: vArray[22],
+            Odometer: parseFloat(vArray[23]),
+            Odometer_Brand: vArray[24],
+            Estimated_Retail_Value: parseFloat(vArray[25]),
+            Repair_Cost: parseFloat(vArray[26]),
+            Engine: vArray[27],
+            Drive: vArray[28],
+            Transmission: vArray[29],
+            Fuel_Type: vArray[30],
+            Cylinders: vArray[31],
+            Runs_Drives: vArray[32],
+            Sale_Status: vArray[33],
+            High_Bid: vArray[34],
+            Special_Note: vArray[35],
+            Location_City: vArray[36],
+            Location_State: vArray[37],
+            Location_Zip: vArray[38],
+            Location_Country: vArray[39],
+            Currency_Code: vArray[40],
+            Image_Thumbnail: vArray[41],
+            Create_DateTime: vArray[42],
+            Grid_Row: vArray[43],
+            Make_an_Offer_Eligible: (vArray[44] === "N" ? false : true) ,
+            Buy_it_Now_Price: parseFloat(vArray[45]),
+            Image_URL: vArray[46],
+            Trim: vArray[47],
+            Last_Updated_Time: moment(vArray[48]).format("MMM Do, YYYY HH:mm a")
+          }
+
+          //console.log(vehicleObj);
+          db.Vehicle.create(vehicleObj).catch(function (err) {
+            resp.write(
+              "<p>Failed to save " +
+              vehicleObj.VIN +
+                " data to the db</p>"
+            );
+            console.log(err);
+          });
+
+          resp.write(
+            "<p>" +
+              vehicleObj.VIN +
+              " has been saved to the database.</p>"
+          );
+        })
+        )
+        .on("error", (err) => {
+          console.log("Error while reading file.", err);
+        })
+        .on("end", () => {
+          console.log("Read File Successfull");
+          resp.write(badCount + " records were not inserted.");
+        });
+    });
+
+    app.get("/api/getVehicles", (req, res) => {
+      db.Vehicle.findAll({}).then((dbVehicle) => {
+        res.json(dbVehicle);
+      });
+    });
+
+      // This method does Multi-Column Search
+  app.get("/api/autosearch/:searchQuery", (req, res) => {
+    const Op = Sequelize.Op;
+    const searchQuery = req.params.searchQuery;
+    const requestStart = Date.now();
+    db.Vehicle.findAll({
+      where: {
+        [Op.or]: {
+          Item_Number: { [Op.like]: "%" + searchQuery + "%" },
+          Lot_Number: { [Op.like]: "%" + searchQuery + "%" },
+          Year: { [Op.like]: "%" + searchQuery + "%" },
+          Make: { [Op.like]: "%" + searchQuery + "%" },
+          Model_Group: { [Op.like]: "%" + searchQuery + "%" },
+          Model_Details: { [Op.like]: "%" + searchQuery + "%" },
+          Body_Style: { [Op.like]: "%" + searchQuery + "%" },
+          Color: { [Op.like]: "%" + searchQuery + "%" },
+          VIN: { [Op.like]: "%" + searchQuery + "%" },
+          Location_City: { [Op.like]: "%" + searchQuery + "%" },
+          Location_State: { [Op.like]: "%" + searchQuery + "%" },
+          Location_Zip: { [Op.like]: "%" + searchQuery + "%" },
+          Location_Country: { [Op.like]: "%" + searchQuery + "%" },
+          Trim: { [Op.like]: "%" + searchQuery + "%" },
+        },
+      },
+    })
+      .then((dbVehicle) => {
+        const processingTime = Date.now() - requestStart;
+        var data = {
+          processingTime: processingTime / 1000 + " seconds",
+          rowCount: dbVehicle.length,
+          results: dbVehicle,
+        };
+
+        // for(var k = 0; k < dbVehicle.length; k++){
+        //   var options = {
+        //     method: "GET",
+        //     uri: dbVehicle[k].Image_URL,
+        //     json: true
+        //   };
+      
+        //   request(options, (err, resp, body) => {
+        //     if (err) {
+        //       console.log(err);
+        //       return;
+        //     }
+      
+        //     var data = body;
+        //     var images = [];
+        //     for (var i = 0; i < data.lotImages.length; i++){            
+        //       for (var j = 0; j < data.lotImages[i].link.length; j++){
+        //         if(data.lotImages[i].link[j].isHdImage === false && data.lotImages[i].link[j].isThumbNail === false){
+        //           images.push({ [i+1]  : data.lotImages[i].link[j].url });
+        //         }
+        //       }
+        //     }
+        //     dbVehicle[i].images = images;
+        //   });
+        // }
+        
+        res.json(data);
+      })
+      .catch(function (err) {
+        res.render("error", err);
+      });
+  });
+
+  // The Get searches specified columns 
+  // searchBy is the column name && searchQuery is the value searchFor
+  app.get("/api/advautosearch/:searchBy/:searchQuery", (req, res) => {
+    const Op = Sequelize.Op;
+    const searchBy = req.params.searchBy;
+    const searchQuery = req.params.searchQuery;
+    const searchObj = {};
+    searchObj[searchBy] = { [Op.like]: "%" + searchQuery + "%" };
+    const requestStart = Date.now();
+
+    db.Vehicle.findAll({
+      where: {
+        [Op.or]: searchObj,
+      },
+    })
+      .then((dbVehicle) => {
+        const processingTime = Date.now() - requestStart;
+        var data = {
+          processingTime: processingTime / 1000 + " seconds",
+          rowCount: dbVehicle.length,
+          results: dbVehicle,
+        };
+        res.json(data);
+      })
+      .catch(function (err) {
+        res.status(500).json(err);
+      });
+  });
+
+  app.post("/api/getimages", (req, res) => {
+    // Takes an object with imageUrl (string), isHdImage (boolean), isThumbNail (boolean)
+    var options = {
+      method: "GET",
+      uri: req.body.imageUrl,
+    };
+
+    request(options, (err, resp, body) => {
+      if (err) {
+        console.log(err);
+        return;
+      }
+
+      var data = JSON.parse(body);
+      console.log(data.lotImages[0].link);
+      var images = [];
+      for (var i = 0; i < data.lotImages.length; i++){
+        if (req.body.isHdImage === true && (req.body.isThumbNail === false || req.body.isThumbNail == undefined)){
+          for (var j = 0; j < data.lotImages[i].link.length; j++){
+            if(data.lotImages[i].link[j].isHdImage === true && data.lotImages[i].link[j].isThumbNail === false){
+              images.push({ [i+1] : data.lotImages[i].link[j].url });
+            }
+          }
+        }
+
+        if ((req.body.isHdImage === false && (req.body.isThumbNail === false || req.body.isThumbNail == undefined)) || (req.body.isHdImage == undefined || req.body.isThumbNail == undefined) ){
+          for (var j = 0; j < data.lotImages[i].link.length; j++){
+            if(data.lotImages[i].link[j].isHdImage === false && data.lotImages[i].link[j].isThumbNail === false){
+              images.push({ [i+1]  : data.lotImages[i].link[j].url });
+            }
+          }
+        }
+
+        if (req.body.isThumbNail === true && (req.body.isHdImage === false || req.body.isHdImage == undefined)){
+          for (var j = 0; j < data.lotImages[i].link.length; j++){
+            if(data.lotImages[i].link[j].isThumbNail === true && data.lotImages[i].link[j].isHdImage === false){
+              images.push({ [i+1] : data.lotImages[i].link[j].url });
+            }
+          }
+        }
+      }
+
+      res.json(images);
+    });
+  });
+
+
 };

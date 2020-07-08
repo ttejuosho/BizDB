@@ -12,6 +12,10 @@ router.get("/auction", (req, res) => {
   res.render("auction");
 });
 
+router.get("/autos", (req, res) => {
+  res.render("autos");
+});
+
 router.get("/index", (req, res) => {
   db.Business.count().then((dbCount) => {
     return res.render("index", { count: dbCount });
