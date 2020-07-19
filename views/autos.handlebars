@@ -94,7 +94,7 @@
             '<p class="mb-1"><strong>Repair Cost</strong>: $' + vehicle.Repair_Cost + '</p>' +
             '<p class="mb-1"><strong>Last Updated</strong>: ' + vehicle.Last_Updated_Time + '</p>' +
             '</div>';
-            console.log(vehicle.Ima)
+
         return html;
     }
 
@@ -103,7 +103,7 @@
             {
                 dataType: 'json',
                 type: 'GET',
-                url: "http://inventory.copart.io/v1/lotImages/26519090?country=us&brand=cprt&yardNumber=1" } )
+                url: "http://inventory.copart.io/v1/lotImages/26519090?country=us&brand=cprt&yardNumber=1" })
             .done(function(data) {
                 console.log(data);
             })
@@ -114,7 +114,8 @@
                 alert( "complete" );
             });
     }
-getImages();
+//getImages();
+
     function loadVehicleData() {
         event.preventDefault();
         $('#spinner').removeAttr('hidden');
@@ -154,7 +155,7 @@ getImages();
             }
         },
         onChange: function (value) {
-            console.log(value);
+            //console.log(value);
         }
     });
 
@@ -167,6 +168,7 @@ getImages();
                     type: 'GET',
                     contentType: 'json'
                 }).then((response) => {
+                    console.log(response);
                     $('#searchQuerySelectize')[0].selectize.clearOptions();
                     $('#searchQuerySelectize')[0].selectize.load(function (callback) { callback(response); });
                 });

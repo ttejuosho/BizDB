@@ -19,10 +19,13 @@
   "homepage": "https://github.com/thomasbyoung/chamberLink#readme",
   "dependencies": {
     "body-parser": "^1.19.0",
+    "chai": "^4.2.0",
+    "chai-http": "^4.3.0",
     "event-stream": "^4.0.1",
     "express": "^4.17.1",
     "express-handlebars": "^4.0.3",
     "method-override": "^3.0.0",
+    "mocha": "^8.0.1",
     "moment": "^2.27.0",
     "mysql2": "^2.1.0",
     "neat-csv": "^5.2.0",

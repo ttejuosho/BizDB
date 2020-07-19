@@ -32,7 +32,7 @@ module.exports = function (app) {
     });
   });
 
-  app.post("/api/updateBusiness/:id", (req,res)=>{
+  app.post("/api/updateBusiness/:id", (req, res) => {
     db.Business.update({
       Company: req.body.Company,
       Address: req.body.Address,
@@ -51,13 +51,13 @@ module.exports = function (app) {
       SIC_Code: req.body.SIC_Code,
       Industry: req.body.Industry,
     },
-    {
-      where: {
-        id: req.params.id,
-      },
-    }).then((dbBusiness) => {
-      res.json(dbBusiness);
-    });
+      {
+        where: {
+          id: req.params.id,
+        },
+      }).then((dbBusiness) => {
+        res.json(dbBusiness);
+      });
   });
 
   app.get("/api/getBusiness/:id", (req, res) => {
@@ -180,7 +180,7 @@ module.exports = function (app) {
   app.get("/api/loadFileData", (req, resp) => {
     var badCount = 0;
     var s = fs
-      .createReadStream("8615.csv")
+      .createReadStream("8613.csv")
       .pipe(es.split())
       .pipe(
         es.mapSync((business) => {
@@ -216,16 +216,16 @@ module.exports = function (app) {
               db.Business.create(cleanObj).catch(function (err) {
                 resp.write(
                   "<p>Failed to save " +
-                    cleanObj.Company +
-                    " data to the db</p>"
+                  cleanObj.Company +
+                  " data to the db</p>"
                 );
                 console.log(err);
               });
 
               resp.write(
                 "<p>" +
-                  cleanObj.Company +
-                  " has been saved to the database.</p>"
+                cleanObj.Company +
+                " has been saved to the database.</p>"
               );
             }
           } else {
@@ -324,7 +324,7 @@ module.exports = function (app) {
     db.Business.findAll({
       attributes: [
         // specify an array where the first element is the SQL function and the second is the alias
-        [ Sequelize.fn("DISTINCT", Sequelize.col(req.params.columnName)), 'value' ],
+        [Sequelize.fn("DISTINCT", Sequelize.col(req.params.columnName)), 'value'],
         //[ "id", "id" ],
 
       ],
@@ -332,7 +332,7 @@ module.exports = function (app) {
       res.json(dbBusiness);
     });
   });
-  
+
   app.get("/api/autoRecordCount", (req, res) => {
     db.Vehicle.findAndCountAll().then((dbCount) => {
       res.json(dbCount.count + " records in auto db");
@@ -342,14 +342,14 @@ module.exports = function (app) {
   app.get("/api/loadAutos", (req, resp) => {
     var badCount = 0;
     var s = fs
-      .createReadStream("salesdata0.csv")
+      .createReadStream("salesdata1.csv")
       .pipe(es.split())
       .pipe(
         es.mapSync((vehicle) => {
           var vehicleArray = vehicle.split(',');
           var vArray = [];
-          for(var i = 0; i < vehicleArray.length; i++){
-            if(vehicleArray[i].split('')[0] == '"'){
+          for (var i = 0; i < vehicleArray.length; i++) {
+            if (vehicleArray[i].split('')[0] == '"') {
               var itemArray = vehicleArray[i].split('');
               itemArray.pop();
               itemArray.shift();
@@ -405,7 +405,7 @@ module.exports = function (app) {
             Image_Thumbnail: vArray[41],
             Create_DateTime: vArray[42],
             Grid_Row: vArray[43],
-            Make_an_Offer_Eligible: (vArray[44] === "N" ? false : true) ,
+            Make_an_Offer_Eligible: (vArray[44] === "N" ? false : true),
             Buy_it_Now_Price: parseFloat(vArray[45]),
             Image_URL: vArray[46],
             Trim: vArray[47],
@@ -417,34 +417,34 @@ module.exports = function (app) {
             resp.write(
               "<p>Failed to save " +
               vehicleObj.VIN +
-                " data to the db</p>"
+              " data to the db</p>"
             );
             console.log(err);
           });
 
           resp.write(
             "<p>" +
-              vehicleObj.VIN +
-              " has been saved to the database.</p>"
+            vehicleObj.VIN +
+            " has been saved to the database.</p>"
           );
         })
-        )
-        .on("error", (err) => {
-          console.log("Error while reading file.", err);
-        })
-        .on("end", () => {
-          console.log("Read File Successfull");
-          resp.write(badCount + " records were not inserted.");
-        });
-    });
-
-    app.get("/api/getVehicles", (req, res) => {
-      db.Vehicle.findAll({}).then((dbVehicle) => {
-        res.json(dbVehicle);
+      )
+      .on("error", (err) => {
+        console.log("Error while reading file.", err.sqlMessage);
+      })
+      .on("end", () => {
+        console.log("Read File Successfull");
+        resp.write(badCount + " records were not inserted.");
       });
-    });
+  });
 
-      // This method does Multi-Column Search
+  app.get("/api/getVehicles", (req, res) => {
+    db.Vehicle.findAll({}).then((dbVehicle) => {
+      res.json(dbVehicle);
+    });
+  });
+
+  // This method does Multi-Column Search
   app.get("/api/autosearch/:searchQuery", (req, res) => {
     const Op = Sequelize.Op;
     const searchQuery = req.params.searchQuery;
@@ -483,13 +483,13 @@ module.exports = function (app) {
         //     uri: dbVehicle[k].Image_URL,
         //     json: true
         //   };
-      
+
         //   request(options, (err, resp, body) => {
         //     if (err) {
         //       console.log(err);
         //       return;
         //     }
-      
+
         //     var data = body;
         //     var images = [];
         //     for (var i = 0; i < data.lotImages.length; i++){            
@@ -502,7 +502,7 @@ module.exports = function (app) {
         //     dbVehicle[i].images = images;
         //   });
         // }
-        
+
         res.json(data);
       })
       .catch(function (err) {
@@ -555,27 +555,27 @@ module.exports = function (app) {
       var data = JSON.parse(body);
       console.log(data.lotImages[0].link);
       var images = [];
-      for (var i = 0; i < data.lotImages.length; i++){
-        if (req.body.isHdImage === true && (req.body.isThumbNail === false || req.body.isThumbNail == undefined)){
-          for (var j = 0; j < data.lotImages[i].link.length; j++){
-            if(data.lotImages[i].link[j].isHdImage === true && data.lotImages[i].link[j].isThumbNail === false){
-              images.push({ [i+1] : data.lotImages[i].link[j].url });
+      for (var i = 0; i < data.lotImages.length; i++) {
+        if (req.body.isHdImage === true && (req.body.isThumbNail === false || req.body.isThumbNail == undefined)) {
+          for (var j = 0; j < data.lotImages[i].link.length; j++) {
+            if (data.lotImages[i].link[j].isHdImage === true && data.lotImages[i].link[j].isThumbNail === false) {
+              images.push({ [i + 1]: data.lotImages[i].link[j].url });
             }
           }
         }
 
-        if ((req.body.isHdImage === false && (req.body.isThumbNail === false || req.body.isThumbNail == undefined)) || (req.body.isHdImage == undefined || req.body.isThumbNail == undefined) ){
-          for (var j = 0; j < data.lotImages[i].link.length; j++){
-            if(data.lotImages[i].link[j].isHdImage === false && data.lotImages[i].link[j].isThumbNail === false){
-              images.push({ [i+1]  : data.lotImages[i].link[j].url });
+        if ((req.body.isHdImage === false && (req.body.isThumbNail === false || req.body.isThumbNail == undefined)) || (req.body.isHdImage == undefined || req.body.isThumbNail == undefined)) {
+          for (var j = 0; j < data.lotImages[i].link.length; j++) {
+            if (data.lotImages[i].link[j].isHdImage === false && data.lotImages[i].link[j].isThumbNail === false) {
+              images.push({ [i + 1]: data.lotImages[i].link[j].url });
             }
           }
         }
 
-        if (req.body.isThumbNail === true && (req.body.isHdImage === false || req.body.isHdImage == undefined)){
-          for (var j = 0; j < data.lotImages[i].link.length; j++){
-            if(data.lotImages[i].link[j].isThumbNail === true && data.lotImages[i].link[j].isHdImage === false){
-              images.push({ [i+1] : data.lotImages[i].link[j].url });
+        if (req.body.isThumbNail === true && (req.body.isHdImage === false || req.body.isHdImage == undefined)) {
+          for (var j = 0; j < data.lotImages[i].link.length; j++) {
+            if (data.lotImages[i].link[j].isThumbNail === true && data.lotImages[i].link[j].isHdImage === false) {
+              images.push({ [i + 1]: data.lotImages[i].link[j].url });
             }
           }
         }

@@ -10,7 +10,7 @@
     "test": {
       "username": "root",
       "password": "",
-      "database": "colors_db",
+      "database": "bizDB",
       "host": "127.0.0.1",
       "dialect": "mysql"
     },

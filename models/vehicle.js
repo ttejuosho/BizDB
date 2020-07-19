@@ -141,7 +141,7 @@ module.exports = function (sequelize, DataTypes) {
         allowNull: false,
     },
     Special_Note: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: false,
     },
     Location_City: {
