@@ -55,11 +55,13 @@
 
     function highlighter(object1, keyword) {
         for (let [key, value] of Object.entries(object1)) {
-            var dataPoint = value.toString();
-            if (dataPoint.toLowerCase().includes(keyword.toLowerCase().toString())) {
-                var pattern = new RegExp(keyword, 'gi');
-                dataPoint = dataPoint.replace(pattern, `<mark>${keyword}</mark>`);
-                object1[key] = dataPoint;
+            if (value){
+                dataPoint = value.toString();
+                if (dataPoint.toLowerCase().includes(keyword.toLowerCase().toString())) {
+                    var pattern = new RegExp(keyword, 'gi');
+                    dataPoint = dataPoint.replace(pattern, `<mark>${keyword}</mark>`);
+                    object1[key] = dataPoint;
+                }
             }
         }
         return object1;
