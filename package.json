@@ -1,6 +1,7 @@
 {
   "name": "chamberLink",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "server.js",
   "scripts": {
@@ -23,14 +24,14 @@
     "chai-http": "^4.3.0",
     "event-stream": "^4.0.1",
     "express": "^4.17.1",
-    "express-handlebars": "^4.0.3",
+    "express-handlebars": "^8.0.3",
     "method-override": "^3.0.0",
     "mocha": "^8.0.1",
     "moment": "^2.27.0",
-    "mysql2": "^2.1.0",
+    "mysql2": "^3.16.0",
     "neat-csv": "^5.2.0",
     "nodemon": "^2.0.4",
     "request": "^2.88.2",
-    "sequelize": "^5.21.6"
+    "sequelize": "^6.37.7"
   }
 }

@@ -1,15 +1,16 @@
-const db = require("../models");
-const Sequelize = require("sequelize");
+import db from '../models/index.cjs';
+import Sequelize from 'sequelize';
 const Op = Sequelize.Op;
-const neatCsv = require("neat-csv");
-const fs = require("fs");
-var es = require("event-stream");
-var moment = require("moment");
-var request = require("request");
+import neatCsv from 'neat-csv';
+import fs from 'fs';
+import es from 'event-stream';
+import moment from 'moment';
+import request from 'request';
+import { fn, col, where } from "sequelize";
 
 // Routes
 // =============================================================
-module.exports = function (app) {
+export default function (app) {
   app.get(`/api/Business/:search`, (req, res) => {
     db.Business.findAll({
       where: {
@@ -180,7 +181,7 @@ module.exports = function (app) {
   app.get("/api/loadFileData", (req, resp) => {
     var badCount = 0;
     var s = fs
-      .createReadStream("8613.csv")
+      .createReadStream("8611.csv")
       .pipe(es.split())
       .pipe(
         es.mapSync((business) => {
@@ -335,14 +336,14 @@ module.exports = function (app) {
 
   app.get("/api/autoRecordCount", (req, res) => {
     db.Vehicle.findAndCountAll().then((dbCount) => {
-      res.json(dbCount.count + " records in auto db");
+      res.json({ count: dbCount.count });
     });
   });
 
   app.get("/api/loadAutos", (req, resp) => {
     var badCount = 0;
     var s = fs
-      .createReadStream("salesdata1.csv")
+      .createReadStream("salesdata.csv")
       .pipe(es.split())
       .pipe(
         es.mapSync((vehicle) => {
@@ -445,70 +446,90 @@ module.exports = function (app) {
   });
 
   // This method does Multi-Column Search
-  app.get("/api/autosearch/:searchQuery", (req, res) => {
-    const Op = Sequelize.Op;
-    const searchQuery = req.params.searchQuery;
-    const requestStart = Date.now();
-    db.Vehicle.findAll({
-      where: {
-        [Op.or]: {
-          Item_Number: { [Op.like]: "%" + searchQuery + "%" },
-          Lot_Number: { [Op.like]: "%" + searchQuery + "%" },
-          Year: { [Op.like]: "%" + searchQuery + "%" },
-          Make: { [Op.like]: "%" + searchQuery + "%" },
-          Model_Group: { [Op.like]: "%" + searchQuery + "%" },
-          Model_Details: { [Op.like]: "%" + searchQuery + "%" },
-          Body_Style: { [Op.like]: "%" + searchQuery + "%" },
-          Color: { [Op.like]: "%" + searchQuery + "%" },
-          VIN: { [Op.like]: "%" + searchQuery + "%" },
-          Location_City: { [Op.like]: "%" + searchQuery + "%" },
-          Location_State: { [Op.like]: "%" + searchQuery + "%" },
-          Location_Zip: { [Op.like]: "%" + searchQuery + "%" },
-          Location_Country: { [Op.like]: "%" + searchQuery + "%" },
-          Trim: { [Op.like]: "%" + searchQuery + "%" },
-        },
-      },
-    })
-      .then((dbVehicle) => {
-        const processingTime = Date.now() - requestStart;
-        var data = {
-          processingTime: processingTime / 1000 + " seconds",
-          rowCount: dbVehicle.length,
-          results: dbVehicle,
-        };
+  //const { Op } = require("sequelize");
 
-        // for(var k = 0; k < dbVehicle.length; k++){
-        //   var options = {
-        //     method: "GET",
-        //     uri: dbVehicle[k].Image_URL,
-        //     json: true
-        //   };
+app.get("/api/autosearch/:searchQuery", async (req, res) => {
+  const requestStart = Date.now();
 
-        //   request(options, (err, resp, body) => {
-        //     if (err) {
-        //       console.log(err);
-        //       return;
-        //     }
+  // Decode & normalize input
+  const raw = String(req.params.searchQuery ?? "");
+  const searchQuery = decodeURIComponent(raw).trim();
 
-        //     var data = body;
-        //     var images = [];
-        //     for (var i = 0; i < data.lotImages.length; i++){            
-        //       for (var j = 0; j < data.lotImages[i].link.length; j++){
-        //         if(data.lotImages[i].link[j].isHdImage === false && data.lotImages[i].link[j].isThumbNail === false){
-        //           images.push({ [i+1]  : data.lotImages[i].link[j].url });
-        //         }
-        //       }
-        //     }
-        //     dbVehicle[i].images = images;
-        //   });
-        // }
+  // Basic validation for auto-search endpoints
+  if (searchQuery.length < 2) {
+    return res.status(400).json({
+      processingTime: `${(Date.now() - requestStart) / 1000} seconds`,
+      rowCount: 0,
+      results: [],
+      message: "searchQuery must be at least 2 characters.",
+    });
+  }
 
-        res.json(data);
-      })
-      .catch(function (err) {
-        res.render("error", err);
-      });
-  });
+  // Optional: escape % and _ so users can't accidentally broaden the search too much
+  // (This is not SQL injection, but it avoids wildcard-only searches.)
+  const escaped = searchQuery.replace(/[%_\\]/g, "\\$&");
+  const pattern = `%${escaped}%`;
+
+  // If query looks numeric, enable exact matching for numeric columns
+  const numericQuery = /^\d+$/.test(searchQuery) ? Number(searchQuery) : null;
+
+  // Build OR conditions (portable across Sequelize versions)
+  const orConditions = [
+    { Item_Number: { [Op.like]: pattern } },
+    { Lot_Number: { [Op.like]: pattern } },
+    { Make: { [Op.like]: pattern } },
+    { Model_Group: { [Op.like]: pattern } },
+    { Model_Details: { [Op.like]: pattern } },
+    { Body_Style: { [Op.like]: pattern } },
+    { Color: { [Op.like]: pattern } },
+    { VIN: { [Op.like]: pattern } },
+    { Location_City: { [Op.like]: pattern } },
+    { Location_State: { [Op.like]: pattern } },
+    { Location_Zip: { [Op.like]: pattern } },
+    { Location_Country: { [Op.like]: pattern } },
+    { Trim: { [Op.like]: pattern } },
+  ];
+
+  if (numericQuery !== null) {
+    // Prefer equality for numeric columns if those columns are numeric in your schema
+    orConditions.push({ Year: numericQuery });
+  } else {
+    // If Year is actually stored as a string, you can keep LIKE:
+    orConditions.push({ Year: { [Op.like]: pattern } });
+  }
+
+  // Pagination (defaults)
+  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  const offset = Math.max(Number(req.query.offset ?? 0), 0);
+
+  try {
+    const { count, rows } = await db.Vehicle.findAndCountAll({
+      where: { [Op.or]: orConditions },
+      // If you used escaping above, ensure your dialect supports ESCAPE '\\'
+      // Sequelize doesn't always emit ESCAPE automatically; validate on your DB.
+      limit,
+      offset,
+      // Strongly consider returning only fields you need:
+      // attributes: ["Item_Number", "Lot_Number", "Year", "Make", "Model_Group", "VIN", "Location_City", "Location_State"],
+      order: [["Year", "DESC"]], // adjust as appropriate
+    });
+
+    return res.json({
+      processingTime: `${(Date.now() - requestStart) / 1000} seconds`,
+      rowCount: rows.length,
+      totalCount: count,
+      limit,
+      offset,
+      results: rows,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      processingTime: `${(Date.now() - requestStart) / 1000} seconds`,
+      error: "Search failed.",
+      details: err?.message ?? String(err),
+    });
+  }
+});
 
   // The Get searches specified columns 
   // searchBy is the column name && searchQuery is the value searchFor
@@ -584,6 +605,369 @@ module.exports = function (app) {
       res.json(images);
     });
   });
+
+
+// Map external query param names -> DB column names
+const FIELD_MAP = {
+  itemNumber: "Item_Number",
+  lotNumber: "Lot_Number",
+  year: "Year",
+  make: "Make",
+  modelGroup: "Model_Group",
+  modelDetails: "Model_Details",
+  bodyStyle: "Body_Style",
+  color: "Color",
+  vin: "VIN",
+  locationCity: "Location_City",
+  locationState: "Location_State",
+  locationZip: "Location_Zip",
+  locationCountry: "Location_Country",
+  trim: "Trim",
+};
+
+// Fields included in global q search
+const GLOBAL_Q_FIELDS = Object.values(FIELD_MAP);
+
+// Allow sorting only on known columns (avoid SQL injection via order)
+const SORT_MAP = {
+  year: "Year",
+  make: "Make",
+  lotNumber: "Lot_Number",
+  itemNumber: "Item_Number",
+};
+
+function escapeLike(value) {
+  // Avoid accidental wildcard expansion. Not SQL injection (Sequelize parameterizes),
+  // but prevents users from using %/_ as wildcards.
+  return String(value).replace(/[%_\\]/g, "\\$&");
+}
+
+function buildStringPredicate(dialect, value, matchMode) {
+  const v = escapeLike(value);
+
+  // If using Postgres, Op.iLike is case-insensitive; otherwise you may need collation/lower() patterns.
+  const likeOp = dialect === "postgres" ? Op.iLike : Op.like;
+
+  switch (matchMode) {
+    case "equals":
+      return { [Op.eq]: value };
+    case "startsWith":
+      return { [likeOp]: `${v}%` };
+    case "contains":
+    default:
+      return { [likeOp]: `%${v}%` };
+  }
+}
+
+app.get("/api/vehicles/search", async (req, res) => {
+  const requestStart = Date.now();
+
+  // Pagination
+  const limit = Math.min(Number(req.query.limit ?? 50), 200);
+  const offset = Math.max(Number(req.query.offset ?? 0), 0);
+
+  // Sorting
+  const sortBy = String(req.query.sortBy ?? "year");
+  const sortDirRaw = String(req.query.sortDir ?? "DESC").toUpperCase();
+  const sortDir = sortDirRaw === "ASC" ? "ASC" : "DESC";
+  const sortColumn = SORT_MAP[sortBy] ?? "Year";
+
+  // Match mode: contains | startsWith | equals
+  const matchMode = String(req.query.matchMode ?? "contains");
+
+  // Optional: require at least one filter (prevents full table scans)
+  const hasAnyQuery =
+    Object.keys(req.query).some((k) => k !== "limit" && k !== "offset" && k !== "sortBy" && k !== "sortDir") &&
+    Object.keys(req.query).length > 0;
+
+  if (!hasAnyQuery) {
+    return res.status(400).json({
+      processingTime: `${(Date.now() - requestStart) / 1000} seconds`,
+      rowCount: 0,
+      results: [],
+      message: "Provide at least one search parameter.",
+    });
+  }
+
+  // Build WHERE
+  const dialect = db.sequelize.getDialect();
+  const andConditions = [];
+
+  // 1) Global q (OR across many columns)
+  const q = req.query.q?.toString().trim();
+  if (q && q.length >= 2) {
+    const predicate = buildStringPredicate(dialect, q, matchMode);
+    andConditions.push({
+      [Op.or]: GLOBAL_Q_FIELDS.map((col) => ({ [col]: predicate })),
+    });
+  }
+
+  // 2) Field-specific filters (AND across provided fields)
+  for (const [paramName, columnName] of Object.entries(FIELD_MAP)) {
+    const rawVal = req.query[paramName];
+    if (rawVal === undefined || rawVal === null || String(rawVal).trim() === "") continue;
+
+    // Support comma-separated list => IN (...)
+    const asString = String(rawVal).trim();
+    const values = asString.split(",").map((s) => s.trim()).filter(Boolean);
+
+    // If numeric field (example: Year), handle appropriately
+    if (columnName === "Year") {
+      // Allow list of years: year=2020,2021
+      const years = values
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n));
+
+      if (years.length === 1) {
+        andConditions.push({ [columnName]: { [Op.eq]: years[0] } });
+      } else if (years.length > 1) {
+        andConditions.push({ [columnName]: { [Op.in]: years } });
+      } else {
+        return res.status(400).json({ error: "Invalid year parameter." });
+      }
+      continue;
+    }
+
+    // String field
+    if (values.length === 1) {
+      andConditions.push({
+        [columnName]: buildStringPredicate(dialect, values[0], matchMode),
+      });
+    } else {
+      // If multiple values provided, interpret as OR within that field
+      // e.g. make=Honda,Toyota => (Make LIKE ... OR Make LIKE ...)
+      andConditions.push({
+        [Op.or]: values.map((v) => ({ [columnName]: buildStringPredicate(dialect, v, matchMode) })),
+      });
+    }
+  }
+
+  const where = andConditions.length ? { [Op.and]: andConditions } : {};
+
+  try {
+    const { count, rows } = await db.Vehicle.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [[sortColumn, sortDir]],
+      // Consider reducing payload:
+      // attributes: ["Item_Number","Lot_Number","Year","Make","Model_Group","VIN","Location_City","Location_State"],
+    });
+
+    return res.json({
+      processingTime: `${(Date.now() - requestStart) / 1000} seconds`,
+      rowCount: rows.length,
+      totalCount: count,
+      limit,
+      offset,
+      sortBy,
+      sortDir,
+      results: rows,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      processingTime: `${(Date.now() - requestStart) / 1000} seconds`,
+      error: "Search failed.",
+      details: err?.message ?? String(err),
+    });
+  }
+});
+
+app.get("/api/vehicles/distinct/makes", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.min(Number(req.query.limit ?? 100), 200);
+    const offset = Math.max(Number(req.query.offset ?? 0), 0);
+
+    const dialect = db.sequelize.getDialect();
+    const likeOp = dialect === "postgres" ? Op.iLike : Op.like;
+
+    // Base where: ignore null/empty/whitespace-only Makes
+    const where = {
+      Make: {
+        [Op.and]: [
+          { [Op.ne]: null },
+          { [Op.ne]: "" }
+        ]
+      }
+    };
+
+    // Optional q filter
+    if (q.length > 0) {
+      // Use TRIM(Make) LIKE '%q%'
+      // If you want case-insensitive on non-Postgres, consider storing a normalized column or using LOWER().
+      where.Make = {
+        [Op.and]: [
+          { [Op.ne]: null },
+          { [Op.ne]: "" },
+          { [likeOp]: `%${q}%` }
+        ]
+      };
+    }
+
+    const rows = await db.Vehicle.findAll({
+      attributes: [[fn("DISTINCT", col("Make")), "Make"]],
+      where,
+      order: [[col("Make"), "ASC"]],
+      //limit,
+      offset,
+      raw: true,
+    });
+
+    // Normalize: trim, drop empties, de-dupe (defensive)
+    const makes = Array.from(
+      new Set(
+        rows
+          .map((r) => (r.Make ?? "").toString().trim())
+          .filter((m) => m.length > 0)
+      )
+    );
+
+    return res.json({
+      rowCount: makes.length,
+      results: makes,
+      limit,
+      offset,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to load distinct makes.",
+      details: err?.message ?? String(err),
+    });
+  }
+});
+
+function escapeLike(value) {
+  return String(value).replace(/[%_\\]/g, "\\$&");
+}
+
+function parseMultiQueryParam(input) {
+  if (input === undefined || input === null) return [];
+  const raw = Array.isArray(input) ? input.join(",") : String(input);
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parseIntOrNull(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  const n = Number.parseInt(String(v), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+app.get("/api/vehicles/distinct/models", async (req, res) => {
+  try {
+    const makes = parseMultiQueryParam(req.query.make);
+    if (makes.length === 0) {
+      return res.status(400).json({
+        error: "Query parameter 'make' is required (one or more values).",
+      });
+    }
+
+    const q = String(req.query.q ?? "").trim();
+
+    const fromYear = parseIntOrNull(req.query.fromYear);
+    const toYear = parseIntOrNull(req.query.toYear) ?? new Date().getFullYear(); // default
+
+    if (fromYear !== null && fromYear > toYear) {
+      return res.status(400).json({
+        error: "'fromYear' must be <= 'toYear'.",
+        fromYear,
+        toYear,
+      });
+    }
+
+    const limit = Math.min(Number(req.query.limit ?? 10000), 20000);
+    const offset = Math.max(Number(req.query.offset ?? 0), 0);
+
+    // Choose which column represents "Model"
+    const MODEL_COL = "Model_Group"; // change to "Model_Details" if desired
+
+    // Base WHERE: Make in makes
+    const where = {
+      Make: { [Op.in]: makes },
+      [MODEL_COL]: { [Op.ne]: null },
+    };
+
+    // Exclude empty/whitespace-only models in MySQL
+    const andConditions = [
+      db.sequelize.where(db.sequelize.fn("TRIM", col(MODEL_COL)), { [Op.ne]: "" }),
+    ];
+
+    // Optional: filter by model text within the make(s)
+    if (q.length > 0) {
+      andConditions.push({
+        [MODEL_COL]: { [Op.like]: `%${escapeLike(q)}%` },
+      });
+    }
+
+    // Year range filter:
+    // - If fromYear provided: Year BETWEEN fromYear AND toYear
+    // - Else: Year <= toYear (because toYear defaults to current year)
+    if (fromYear !== null) {
+      andConditions.push({
+        Year: { [Op.between]: [fromYear, toYear] },
+      });
+    } else {
+      andConditions.push({
+        Year: { [Op.lte]: toYear },
+      });
+    }
+
+    const rows = await db.Vehicle.findAll({
+      attributes: ["Make", MODEL_COL],
+      where: {
+        ...where,
+        [Op.and]: andConditions,
+      },
+      // MySQL-safe distinctness:
+      group: ["Make", MODEL_COL],
+      order: [[col("Make"), "ASC"], [col(MODEL_COL), "ASC"]],
+      limit,
+      offset,
+      raw: true,
+    });
+
+    // Group results by make
+    const byMake = {};
+    for (const r of rows) {
+      const make = (r.Make ?? "").toString().trim();
+      const model = (r[MODEL_COL] ?? "").toString().trim();
+      if (!make || !model) continue;
+
+      if (!byMake[make]) byMake[make] = [];
+      byMake[make].push(model);
+    }
+
+    // De-dupe + sort per make
+    for (const make of Object.keys(byMake)) {
+      byMake[make] = Array.from(new Set(byMake[make])).sort((a, b) => a.localeCompare(b));
+    }
+
+    // Flatten unique list across makes (optional convenience)
+    const results = Array.from(new Set(Object.values(byMake).flat())).sort((a, b) =>
+      a.localeCompare(b)
+    );
+
+    return res.json({
+      makes,
+      fromYear,
+      toYear,
+      modelField: MODEL_COL,
+      rowCount: results.length,
+      results,
+      byMake,
+      limit,
+      offset,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to load distinct models for make(s).",
+      details: err?.message ?? String(err),
+    });
+  }
+});
 
 
 };

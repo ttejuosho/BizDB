@@ -1,8 +1,7 @@
-var express = require("express");
+import express from 'express';
+import db from '../models/index.cjs';
 
-var router = express.Router();
-// grabbing our models
-var db = require("../models");
+const router = express.Router();
 
 router.get("/", (req, res) => {
   res.redirect("/index");
@@ -14,6 +13,10 @@ router.get("/auction", (req, res) => {
 
 router.get("/autos", (req, res) => {
   res.render("autos");
+});
+
+router.get("/vq", (req, res) => {
+  res.render("autos2");
 });
 
 router.get("/index", (req, res) => {
@@ -28,4 +31,4 @@ router.get("/select", (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;
