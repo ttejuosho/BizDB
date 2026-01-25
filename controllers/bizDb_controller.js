@@ -31,4 +31,13 @@ router.get("/select", (req, res) => {
   });
 });
 
+router.get("/vehicle/:vehicleId", (req, res) => {
+  const vehicleId = String(req.params.vehicleId ?? "").trim();
+  if (!vehicleId) return res.status(400).send("vehicleId is required.");
+
+  return res.render("vehicle", {
+    vehicleId,
+  });
+});
+
 export default router;

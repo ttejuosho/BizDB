@@ -1,3 +1,4 @@
+//make.cjs
 module.exports = (sequelize, DataTypes) => {
   const Make = sequelize.define(
     "Make",

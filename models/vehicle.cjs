@@ -1,3 +1,4 @@
+// vehicle.cjs
 module.exports = (sequelize, DataTypes) => {
   const Vehicle = sequelize.define(
     "Vehicle",
@@ -8,28 +9,23 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-
       vin: {
         type: DataTypes.CHAR(20),
         allowNull: true,
         unique: true,
       },
-
       make_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
-
       model_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
-
       year: {
         type: DataTypes.SMALLINT.UNSIGNED,
         allowNull: true,
       },
-
       trim: {
         type: DataTypes.STRING(100),
         allowNull: true,
@@ -91,7 +87,7 @@ module.exports = (sequelize, DataTypes) => {
       drivetrain: {
         type: DataTypes.STRING(50),
         allowNull: true,
-      },
+      }
     },
     {
       tableName: "Vehicles",
@@ -102,12 +98,12 @@ module.exports = (sequelize, DataTypes) => {
       indexes: [
         { name: "uq_vehicles_vin", unique: true, fields: ["vin"] },
 
-        { name: "ix_vehicles_make_year", fields: ["make_id", "year"] },
-        {
-          name: "ix_vehicles_make_model_year",
-          fields: ["make_id", "model_id", "year"],
-        },
-        { name: "ix_vehicles_model_year", fields: ["model_id", "year"] },
+        //{ name: "ix_vehicles_make_year", fields: ["make_id", "year"] },
+        // {
+        //   name: "ix_vehicles_make_model_year",
+        //   fields: ["make_id", "model_id", "year"],
+        // },
+        // { name: "ix_vehicles_model_year", fields: ["model_id", "year"] },
         { name: "ix_vehicles_year", fields: ["year"] },
       ],
     }
@@ -117,6 +113,14 @@ module.exports = (sequelize, DataTypes) => {
     Vehicle.belongsTo(models.Make, {
       foreignKey: "make_id",
       as: "make",
+    });
+    Vehicle.hasMany(models.VehicleImage, {
+      foreignKey: "vehicle_id",
+      as: "VehicleImages",
+    });
+    Vehicle.hasMany(models.SaleLot, {
+      foreignKey: "vehicle_id",
+      as: "SaleLots",
     });
 
     /**

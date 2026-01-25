@@ -1,3 +1,4 @@
+// model.cjs
 module.exports = (sequelize, DataTypes) => {
   const Model = sequelize.define(
     "Model",
@@ -52,13 +53,6 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "make_id",
       as: "make",
     });
-
-    // Because model_id is not globally unique in the DB schema (composite PK),
-    // a simple Vehicle.belongsTo(Model) join on model_id alone may be ambiguous.
-    // Your safest query pattern is always (make_id, model_id).
-    //
-    // If you want an association anyway, you can add one with constraints disabled
-    // and include make_id in query where clauses. See Vehicle.associate.
   };
 
   return Model;

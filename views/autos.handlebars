@@ -1,140 +1,229 @@
+<!-- =========================
+UPDATED HTML (drop-in changes)
+========================= -->
+
 <main role="main">
-  <div class="jumbotron">
+  <div class="jumbotron py-4 mb-0">
     <div class="container">
-      <h1 class="display-3">Chicago Auctions Database</h1>
-      <p>Faceted Search (Make → Model → Year Range)</p>
+      <div class="d-flex flex-wrap align-items-center justify-content-between">
+        <div>
+          <h1 class="display-4 mb-1">Vehicle Auctions Database</h1>
+          <p class="mb-0 text-muted">Faceted Search</p>
+        </div>
+        <div class="mt-3 mt-md-0">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshFacetsBtnTop">
+            Refresh Facets
+          </button>
+        </div>
+      </div>
 
-      <form id="facetForm">
-        <div class="form-row">
-          <div class="col-12 col-lg-10">
-            <div class="card p-3 mb-3">
-              <div class="form-row">
-                <div class="col-12 col-md-4 mb-2">
-                  <label class="font-weight-bold mb-1">Makes</label>
-                  <select
-                    id="makesSelect"
-                    class="form-control"
-                    multiple
-                  ></select>
-                  <small class="text-muted">Select one or more makes.</small>
+      <form id="facetForm" class="mt-3">
+        <div class="card p-3">
+          <!-- Primary filters -->
+          <div class="form-row">
+            <div class="col-12 col-md-4 mb-2">
+              <label class="font-weight-bold mb-1">Makes</label>
+              <select id="makesSelect" class="form-control" multiple></select>
+              <small class="text-muted">Select one or more makes.</small>
+            </div>
+
+            <div class="col-12 col-md-4 mb-2">
+              <label class="font-weight-bold mb-1">Models</label>
+              <select id="modelsSelect" class="form-control" multiple></select>
+              <small class="text-muted">Populated from selected makes.</small>
+            </div>
+
+            <div class="col-6 col-md-2 mb-2">
+              <label class="font-weight-bold mb-1">From Year</label>
+              <input id="fromYear" type="number" class="form-control" placeholder="e.g. 2015" />
+            </div>
+
+            <div class="col-6 col-md-2 mb-2">
+              <label class="font-weight-bold mb-1">To Year</label>
+              <input id="toYear" type="number" class="form-control" placeholder="e.g. 2026" />
+            </div>
+          </div>
+
+          <!-- Advanced (collapsible) -->
+          <div class="mt-2">
+            <button class="btn btn-link px-0" id="toggleAdvancedBtn" type="button" data-toggle="collapse" data-target="#advancedFilters" aria-expanded="false">
+              Advanced filters
+            </button>
+            <div class="collapse" id="advancedFilters">
+              <div class="form-row mt-2">
+                <div class="col-12 col-md-6 mb-2">
+                  <label class="font-weight-bold mb-1">VIN (optional)</label>
+                  <input id="vinQuery" type="text" class="form-control" placeholder="Filter by VIN contains..." />
                 </div>
 
-                <div class="col-12 col-md-4 mb-2">
-                  <label class="font-weight-bold mb-1">Models</label>
-                  <select
-                    id="modelsSelect"
-                    class="form-control"
-                    multiple
-                  ></select>
-                  <small class="text-muted">Populated from selected makes.</small>
+                <div class="col-6 col-md-3 mb-2">
+                  <label class="font-weight-bold mb-1">Results per page</label>
+                  <select id="perPage" class="form-control">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                  </select>
                 </div>
 
-                <div class="col-6 col-md-2 mb-2">
-                  <label class="font-weight-bold mb-1">From Year</label>
-                  <input
-                    id="fromYear"
-                    type="number"
-                    class="form-control"
-                    placeholder="e.g. 2015"
-                  />
-                </div>
-
-                <div class="col-6 col-md-2 mb-2">
-                  <label class="font-weight-bold mb-1">To Year</label>
-                  <input
-                    id="toYear"
-                    type="number"
-                    class="form-control"
-                    placeholder="e.g. 2026"
-                  />
+                <div class="col-6 col-md-3 mb-2">
+                  <label class="font-weight-bold mb-1">Sort</label>
+                  <select id="sortBy" class="form-control">
+                    <option value="saleDateDesc" selected>Sale Date (newest)</option>
+                    <option value="highBidDesc">High Bid (high to low)</option>
+                    <option value="yearDesc">Year (newest)</option>
+                    <option value="yardAsc">Yard (A–Z)</option>
+                    <option value="lotAsc">Lot Number (asc)</option>
+                  </select>
                 </div>
               </div>
 
               <div class="form-row mt-2">
-                <div class="col-12 col-md-6 mb-2">
-                  <label class="font-weight-bold mb-1">VIN (optional)</label>
-                  <input
-                    id="vinQuery"
-                    type="text"
-                    class="form-control"
-                    placeholder="Filter by VIN contains..."
-                  />
-                </div>
-
-                <div class="col-6 col-md-3 mb-2">
-                  <label class="font-weight-bold mb-1">Limit</label>
-                  <input
-                    id="limit"
-                    type="number"
-                    class="form-control"
-                    value="100"
-                    min="1"
-                    max="1000"
-                  />
-                </div>
-
-                <div class="col-6 col-md-3 mb-2">
-                  <label class="font-weight-bold mb-1">Offset</label>
-                  <input
-                    id="offset"
-                    type="number"
-                    class="form-control"
-                    value="0"
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              <div class="form-row mt-3">
                 <div class="col-12 col-md-4 mb-2">
-                  <button
-                    type="button"
-                    class="btn btn-dark btn-block"
-                    id="applyFiltersBtn"
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-                <div class="col-12 col-md-4 mb-2">
-                  <button
-                    type="button"
-                    class="btn btn-outline-secondary btn-block"
-                    id="resetFiltersBtn"
-                  >
-                    Reset
-                  </button>
-                </div>
-                <div class="col-12 col-md-4 mb-2">
-                  <button
-                    type="button"
-                    class="btn btn-outline-primary btn-block"
-                    id="refreshFacetsBtn"
-                  >
-                    Refresh Facets
-                  </button>
-                </div>
-              </div>
-
-              <div class="mt-3">
-                <div class="d-flex flex-wrap">
-                  <div class="mr-4 mb-2">
-                    <div class="font-weight-bold">Years (available)</div>
-                    <div id="yearsFacet" class="small text-muted">—</div>
+                  <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="onlyWithImages">
+                    <label class="custom-control-label" for="onlyWithImages">Only with images</label>
                   </div>
-                  <div class="mr-4 mb-2">
-                    <div class="font-weight-bold">Selected</div>
-                    <div
-                      id="selectedFacetSummary"
-                      class="small text-muted"
-                    >—</div>
+                </div>
+                <div class="col-12 col-md-4 mb-2">
+                  <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="onlyOfferEligible">
+                    <label class="custom-control-label" for="onlyOfferEligible">Make-an-offer eligible</label>
                   </div>
-                  <div class="mb-2">
-                    <div class="font-weight-bold">Status</div>
-                    <div id="statusText" class="small text-muted">Ready.</div>
+                </div>
+                <div class="col-12 col-md-4 mb-2">
+                  <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="onlyHasBid">
+                    <label class="custom-control-label" for="onlyHasBid">Has bid (High Bid &gt; 0)</label>
                   </div>
                 </div>
               </div>
 
+              <!-- NEW Advanced filters: Lot/Sale + Vehicle filters -->
+<div class="form-row mt-3">
+  <!-- Location State -->
+  <div class="col-12 col-md-4 mb-2">
+    <label class="font-weight-bold mb-1">Location State</label>
+    <select id="locationStatesSelect" class="form-control" multiple></select>
+    <small class="text-muted">Filters by yard location state (e.g., IL, IN, WI).</small>
+  </div>
+
+  <!-- Sale Status -->
+  <div class="col-12 col-md-4 mb-2">
+    <label class="font-weight-bold mb-1">Sale Status</label>
+    <select id="saleStatusesSelect" class="form-control" multiple></select>
+    <small class="text-muted">Example: Pure Sale, Minimum Bid, Sold.</small>
+  </div>
+
+  <!-- Runs & Drives -->
+  <div class="col-12 col-md-4 mb-2">
+    <label class="font-weight-bold mb-1">Runs &amp; Drives</label>
+    <select id="runsDrivesSelect" class="form-control" multiple></select>
+    <small class="text-muted">Example: Run &amp; Drive Verified.</small>
+  </div>
+</div>
+
+<div class="form-row mt-3">
+  <!-- Sale Date Range -->
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">Sale Date From</label>
+    <input id="saleDateFrom" type="date" class="form-control" />
+    <small class="text-muted">Start date.</small>
+  </div>
+
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">Sale Date To</label>
+    <input id="saleDateTo" type="date" class="form-control" />
+    <small class="text-muted">End date.</small>
+  </div>
+
+  <!-- Title Type -->
+  <div class="col-12 col-md-6 mb-2">
+    <label class="font-weight-bold mb-1">Title Type</label>
+    <select id="titleTypesSelect" class="form-control" multiple></select>
+    <small class="text-muted">CT = Clean Title, ST = Salvage Title, RT = Rebuilt Title.</small>
+  </div>
+</div>
+
+<div class="form-row mt-3">
+  <!-- Odometer min/max -->
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">Odometer Min</label>
+    <input id="odometerMin" type="number" class="form-control" placeholder="e.g. 50000" />
+  </div>
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">Odometer Max</label>
+    <input id="odometerMax" type="number" class="form-control" placeholder="e.g. 150000" />
+  </div>
+
+  <!-- High bid min/max -->
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">High Bid Min</label>
+    <input id="highBidMin" type="number" class="form-control" placeholder="e.g. 1000" />
+  </div>
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">High Bid Max</label>
+    <input id="highBidMax" type="number" class="form-control" placeholder="e.g. 10000" />
+  </div>
+</div>
+
+<div class="form-row mt-3">
+  <!-- Buy it now min/max -->
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">Buy It Now Min</label>
+    <input id="buyItNowMin" type="number" class="form-control" placeholder="e.g. 1000" />
+  </div>
+  <div class="col-6 col-md-3 mb-2">
+    <label class="font-weight-bold mb-1">Buy It Now Max</label>
+    <input id="buyItNowMax" type="number" class="form-control" placeholder="e.g. 15000" />
+  </div>
+
+  <!-- Trim -->
+  <div class="col-12 col-md-6 mb-2">
+    <label class="font-weight-bold mb-1">Trim</label>
+    <input id="trimQuery" type="text" class="form-control" placeholder="e.g. XLE, Limited, LS" />
+    <small class="text-muted">Matches trim (contains).</small>
+  </div>
+</div>
+
+
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="form-row mt-3">
+            <div class="col-12 col-md-4 mb-2">
+              <button type="button" class="btn btn-dark btn-block" id="applyFiltersBtn">
+                Apply Filters
+              </button>
+            </div>
+            <div class="col-12 col-md-4 mb-2">
+              <button type="button" class="btn btn-outline-secondary btn-block" id="resetFiltersBtn">
+                Reset
+              </button>
+            </div>
+            <div class="col-12 col-md-4 mb-2">
+              <button type="button" class="btn btn-outline-primary btn-block" id="refreshFacetsBtn">
+                Refresh Facets
+              </button>
+            </div>
+          </div>
+
+          <!-- Facet summaries -->
+          <div class="mt-3">
+            <div class="d-flex flex-wrap">
+              <div class="mr-4 mb-2">
+                <div class="font-weight-bold">Years (available)</div>
+                <div id="yearsFacet" class="small text-muted">—</div>
+              </div>
+              <div class="mr-4 mb-2">
+                <div class="font-weight-bold">Selected</div>
+                <div id="selectedFacetSummary" class="small text-muted">—</div>
+              </div>
+              <div class="mb-2">
+                <div class="font-weight-bold">Status</div>
+                <div id="statusText" class="small text-muted">Ready.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -142,18 +231,59 @@
     </div>
   </div>
 
-  <div class="container">
-    <div class="row">
-      <div class="col-12">
-        <p id="searchInfo" class="mt-2"></p>
+  <div class="container my-3">
+    <!-- Active filter chips -->
+    <div id="activeFiltersBar" class="mb-2" style="position: sticky; top: 10px; z-index: 10;">
+      <div class="card p-2">
+        <div class="d-flex flex-wrap align-items-center">
+          <div class="font-weight-bold mr-2">Active filters:</div>
+          <div id="activeFilterChips" class="d-flex flex-wrap"></div>
+          <div class="ml-auto mt-2 mt-md-0">
+            <button class="btn btn-link btn-sm" id="clearAllFiltersLink" type="button">Clear all</button>
+          </div>
+        </div>
       </div>
     </div>
 
+    <!-- Results toolbar -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+      <div>
+        <p id="searchInfo" class="mb-0 text-muted"></p>
+      </div>
+      <div class="d-flex flex-wrap align-items-center">
+        <div class="mr-2 mb-2 mb-md-0">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="prevPageBtn">Prev</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="nextPageBtn">Next</button>
+        </div>
+        <div class="mb-2 mb-md-0">
+          <span class="badge badge-light border" id="pageIndicator">Page 1</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results -->
     <div class="row" id="resultsDiv"></div>
 
+    <!-- Empty state -->
+    <div id="emptyState" class="card p-4 text-center my-3" hidden>
+      <h5 class="mb-2">No results</h5>
+      <p class="text-muted mb-3">Try widening the year range, clearing the VIN filter, or selecting fewer models.</p>
+      <div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="emptyClearVinBtn">Clear VIN</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="emptyClearModelsBtn">Clear Models</button>
+      </div>
+    </div>
+
+    <!-- Spinner -->
     <div hidden id="spinner" class="text-center my-4">
       <div class="spinner-border" role="status"></div>
       <div class="mt-2">Loading…</div>
     </div>
+
+    <!-- Toast area -->
+    <div aria-live="polite" aria-atomic="true" style="position: fixed; top: 16px; right: 16px; z-index: 2000;">
+      <div id="toastHost"></div>
+    </div>
   </div>
 </main>
+<script src="/assets/js/script.js"></script>

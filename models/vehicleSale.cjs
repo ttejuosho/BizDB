@@ -1,3 +1,4 @@
+// vehicleSale.cjs
 module.exports = function (sequelize, DataTypes) {
   const VehicleSale = sequelize.define("VehicleSale", {
     Vehicle_Sale_Id: {

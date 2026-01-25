@@ -30,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     {
-      tableName: "vehicle_make_model_year_stats",
+      tableName: "Vehicle_Make_Model_Year_Stats",
       underscored: true,
       timestamps: false,
       indexes: [

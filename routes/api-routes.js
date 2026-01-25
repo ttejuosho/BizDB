@@ -9,6 +9,7 @@ import { fn, col, where, QueryTypes } from "sequelize";
 import path from "path";
 import csv from "csv-parser";
 
+
 // Routes
 // =============================================================
 export default function (app) {
@@ -179,224 +180,6 @@ export default function (app) {
   app.get("/api/test", async (req, res) => {
     console.log(await getMakesByIds(["113f7cec-318e-4112-9965-a73e38612dcf"]));
     console.log(await getModelsByIds(["cceddcb9-5136-4683-805d-cbf77269a606"]));
-  });
-
-  app.get("/api/loadVehicleData", async (req, res) => {
-    const filePath = path.join(process.cwd(), "salesdata.csv");
-
-    // batch settings
-    const VEHICLE_BATCH_SIZE = 500;
-
-    // basic caches to reduce DB calls
-    const makeCache = new Map(); // make_code -> make_id (uuid string)
-    const modelCache = new Map(); // `${make_id}:${model_code}` -> model_id
-
-    let processed = 0;
-    let insertedVehicles = 0;
-    let skippedVehicles = 0;
-    let makeCreated = 0;
-    let modelCreated = 0;
-    let failed = 0;
-
-    const vehicleBatch = [];
-
-    async function getOrCreateMake(makeName) {
-      const make_code = slugCode(makeName);
-      if (!make_code) return null;
-
-      if (makeCache.has(make_code)) return makeCache.get(make_code);
-
-      const [make, created] = await db.Make.findOrCreate({
-        where: { make_code },
-        defaults: {
-          make_code,
-          make_name: String(makeName ?? "").trim() || null,
-          is_active: true,
-        },
-      });
-
-      if (created) makeCreated += 1;
-
-      makeCache.set(make_code, make.make_id);
-      return make.make_id;
-    }
-
-    async function getOrCreateModel(makeId, modelName) {
-      const model_code = slugCode(modelName);
-      if (!makeId || !model_code) return null;
-
-      const key = `${makeId}:${model_code}`;
-      if (modelCache.has(key)) return modelCache.get(key);
-
-      const [model, created] = await db.Model.findOrCreate({
-        where: {
-          make_id: makeId,
-          model_code,
-        },
-        defaults: {
-          make_id: makeId,
-          model_code,
-          model_name: String(modelName ?? "").trim() || null,
-          is_active: true,
-        },
-      });
-
-      if (created) modelCreated += 1;
-
-      modelCache.set(key, model.model_id);
-      return model.model_id;
-    }
-
-    async function flushVehicleBatch() {
-      if (vehicleBatch.length === 0) return;
-
-      try {
-        // ignoreDuplicates will skip rows violating uq_vehicles_vin (VIN unique)
-        // NOTE: if VIN is NULL, MySQL allows multiple NULLs in a unique index.
-        const toInsert = vehicleBatch.splice(0, vehicleBatch.length);
-
-        await db.Vehicle.bulkCreate(toInsert, {
-          ignoreDuplicates: true,
-          validate: false,
-        });
-
-        // We can’t perfectly know how many were skipped by ignoreDuplicates without extra queries.
-        // We’ll approximate: assume all attempted inserted; if you need exact, we can add a follow-up count query.
-        insertedVehicles += toInsert.length;
-      } catch (err) {
-        failed += vehicleBatch.length;
-        vehicleBatch.length = 0;
-        throw err;
-      }
-    }
-
-    try {
-      // Stream parse CSV
-      const stream = fs
-        .createReadStream(filePath)
-        .pipe(csv({ separator: ",", strict: true }));
-
-      stream.on("data", async (row) => {
-        // Pause stream while we do async DB work to avoid uncontrolled concurrency
-        stream.pause();
-
-        try {
-          processed += 1;
-
-          // Map CSV columns (exact headers from your sample)
-          const year = toIntOrNull(row["Year"]);
-          const makeName = row["Make"];
-          const modelGroup = row["Model Group"];
-
-          // Validate minimal required fields for your schema
-          if (!makeName || !modelGroup) {
-            skippedVehicles += 1;
-            stream.resume();
-            return;
-          }
-
-          const makeId = await getOrCreateMake(makeName);
-          if (!makeId) {
-            skippedVehicles += 1;
-            stream.resume();
-            return;
-          }
-
-          const modelId = await getOrCreateModel(makeId, modelGroup);
-          if (!modelId) {
-            skippedVehicles += 1;
-            stream.resume();
-            return;
-          }
-
-          const vehicleObj = {
-            // IDs (UUID API / Sequelize generates vehicle_id automatically)
-            make_id: makeId,
-            model_id: modelId,
-
-            // Core fields
-            vin: (row["VIN"] ?? "").trim() || null,
-            year,
-
-            // Vehicle attributes (from CSV)
-            model_details: (row["Model Detail"] ?? "").trim() || null,
-            body_style: (row["Body Style"] ?? "").trim() || null,
-            exterior_color: (row["Color"] ?? "").trim() || null,
-
-            engine_size: (row["Engine"] ?? "").trim() || null,
-            drivetrain: (row["Drive"] ?? "").trim() || null,
-            transmission: (row["Transmission"] ?? "").trim() || null,
-            fuel_type: (row["Fuel Type"] ?? "").trim() || null,
-
-            image_thumbnail_url: (row["Image Thumbnail"] ?? "").trim() || null,
-            image_url: (row["Image URL"] ?? "").trim() || null,
-            trim: (row["Trim"] ?? "").trim() || null,
-            country_of_mfg: getCountryOfManufactureFromVin(row["VIN"]),
-            cylinders: (row["Cylinders"] ?? "").trim() || null,
-            powertrain:
-              (row["Fuel Type"] === "GAS"
-                ? "Internal Combustion"
-                : row["Fuel Type"]
-              ).trim() || null,
-          };
-
-          vehicleBatch.push(vehicleObj);
-
-          if (vehicleBatch.length >= VEHICLE_BATCH_SIZE) {
-            await flushVehicleBatch();
-          }
-
-          stream.resume();
-        } catch (err) {
-          failed += 1;
-          // Resume to keep processing, or you can choose to stop hard:
-          // stream.destroy(err);
-          stream.resume();
-        }
-      });
-
-      stream.on("end", async () => {
-        try {
-          await flushVehicleBatch();
-
-          // Because insertedVehicles is “attempted inserts” when using ignoreDuplicates,
-          // adjust to a clearer reporting. If you want exact inserted vs skipped duplicates,
-          // I can add a post-load reconciliation query.
-          res.json({
-            ok: true,
-            file: filePath,
-            summary: {
-              processed,
-              makesCreated: makeCreated,
-              modelsCreated: modelCreated,
-              vehiclesAttemptedInsert: insertedVehicles,
-              vehiclesSkippedMissingFields: skippedVehicles,
-              failed,
-            },
-          });
-        } catch (err) {
-          res.status(500).json({
-            ok: false,
-            error: "Failed while flushing final batch.",
-            details: err?.message ?? String(err),
-          });
-        }
-      });
-
-      stream.on("error", (err) => {
-        res.status(500).json({
-          ok: false,
-          error: "Error while reading CSV.",
-          details: err?.message ?? String(err),
-        });
-      });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        error: "Failed to load vehicle data.",
-        details: err?.message ?? String(err),
-      });
-    }
   });
 
   app.get(`/api/Business/:search`, (req, res) => {
@@ -732,102 +515,453 @@ export default function (app) {
     });
   });
 
-  app.get("/api/loadVehiclesData", async (req, resp) => {
-    var badCount = 0;
-    var s = fs
-      .createReadStream("salesdata1.csv")
-      .pipe(es.split())
-      .pipe(
-        es.mapSync((vehicle) => {
-          var vehicleArray = vehicle.split(",");
-          var vArray = [];
-          for (var i = 0; i < vehicleArray.length; i++) {
-            if (vehicleArray[i].split("")[0] == '"') {
-              var itemArray = vehicleArray[i].split("");
-              itemArray.pop();
-              itemArray.shift();
-              vArray.push(itemArray.join(""));
-            } else {
-              vArray.push(vehicleArray[i]);
-            }
+// ---- parsing helpers ----
+function slugify(s) {
+  return String(s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function parseSaleDate(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s || s === "0") return null;
+
+  // YYYYMMDD (e.g., 20200702)
+  if (/^\d{8}$/.test(s)) {
+    const yyyy = s.slice(0, 4);
+    const mm = s.slice(4, 6);
+    const dd = s.slice(6, 8);
+    return `${yyyy}-${mm}-${dd}`; // DATEONLY-friendly
+  }
+
+  // M/D/YYYY or MM/DD/YYYY
+  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdy) {
+    const mm = String(mdy[1]).padStart(2, "0");
+    const dd = String(mdy[2]).padStart(2, "0");
+    const yyyy = mdy[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // ISO-ish fallback
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return null;
+}
+
+function parseHHMMToTime(raw) {
+  if (raw == null) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+
+  // Sometimes numeric like 1200 or 930
+  if (/^\d+$/.test(s)) {
+    s = s.padStart(4, "0");
+    const hh = s.slice(0, 2);
+    const mm = s.slice(2, 4);
+    const h = Number(hh);
+    const m = Number(mm);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return `${hh}:${mm}:00`;
+    return null;
+  }
+
+  // Already time-ish
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+    return s.length === 5 ? `${s}:00` : s;
+  }
+
+  return null;
+}
+
+function parseBoolYN(raw) {
+  const s = String(raw ?? "").trim().toUpperCase();
+  if (s === "Y" || s === "YES" || s === "TRUE" || s === "1") return true;
+  if (s === "N" || s === "NO" || s === "FALSE" || s === "0") return false;
+  return null;
+}
+
+function parseDecimal(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  // remove currency symbols/commas
+  const cleaned = s.replace(/[$,]/g, "");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+app.get("/api/loadVehiclesData", async (req, res) => {
+  const filePath = "salesdata1.csv";
+
+  let processed = 0;
+  let inserted = 0;
+  let updated = 0;
+  let badCount = 0;
+  let badVins = [];
+
+  // Light in-memory caches to reduce DB roundtrips
+  const makeCache = new Map(); // make_code -> make_id
+  const modelCache = new Map(); // `${make_id}:${model_code}` -> model_id
+  const yardCache = new Map(); // yard_number -> yard_id
+  const locationCache = new Map(); // `${city}|${state}|${zip}|${country}` -> location_id
+  const saleEventCache = new Map(); // `${yard_id}|${sale_date}|${sale_time}|${tz}` -> sale_event_id
+  const vehicleCache = new Map(); // vin -> vehicle_id
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      return res.status(400).json({ error: `CSV file not found: ${filePath}` });
+    }
+
+    const parser = fs.createReadStream(filePath).pipe(
+      csv({
+        columns: true,          // use header row
+        bom: true,
+        relax_quotes: true,
+        relax_column_count: true,
+        trim: true,
+        skip_empty_lines: true,
+      })
+    );
+
+    for await (const row of parser) {
+      processed++;
+
+      // ---- pull required fields (by header name) ----
+      const yardNumberRaw = row["Yard number"];
+      const yardName = row["Yard name"];
+      const saleDateRaw = row["Sale Date M/D/CY"];
+      const dayOfWeek = row["Day of Week"];
+      const saleTimeRaw = row["Sale time (HHMM)"];
+      const timeZone = row["Time Zone"];
+
+      const lotNumberRaw = row["Lot number"];
+      const itemNumberRaw = row["Item#"];
+
+      const makeName = row["Make"];
+      const modelGroup = row["Model Group"];
+      const modelDetail = row["Model Detail"];
+      const yearRaw = row["Year"];
+      const vin = (row["VIN"] ?? "").trim() || null;
+
+      // Location
+      const city = row["Location city"];
+      const state = row["Location state"];
+      const zip = row["Location ZIP"];
+      const country = row["Location country"];
+
+      // Outcome fields
+      const saleStatus = row["Sale Status"];
+      const highBidRaw = row["High Bid =non-vix,Sealed=Vix"];
+      const specialNote = row["Special Note"];
+      const currencyCode = row["Currency Code"];
+      const makeAnOfferRaw = row["Make-an-Offer Eligible"];
+      const buyItNowRaw = row["Buy-It-Now Price"];
+      const estRetailRaw = row["Est. Retail Value"];
+      const repairCostRaw = row["Repair cost"];
+
+      // Lot meta
+      const gridRow = row["Grid/Row"];
+      const vehicleType = row["Vehicle Type"];
+      const odometer = row["Odometer"];
+      const saleTitleState = row["Sale Title State"];
+      const saleTitleType = row["Sale Title Type"];
+      const hasKeys = row["Has Keys-Yes or No"];
+      const isRunAndDrive = row["Runs/Drives"];
+      const damageDescription = row["Damage Description"];
+      const secondaryDamage = row["Secondary Damage"];
+      const createdAtSource = row["Create Date/Time"];
+      const lastUpdatedAtSource = row["Last Updated Time"];
+
+      // Images
+      const thumbnailUrl = row["Image Thumbnail"];
+      const imageUrl = row["Image URL"];
+
+      // ---- parse + validate what we need to create a sale event and lot ----
+      const yardNumber = Number.parseInt(String(yardNumberRaw ?? "").trim(), 10);
+      const lotNumber = Number.parseInt(String(lotNumberRaw ?? "").trim(), 10);
+      const itemNumber = Number.parseInt(String(itemNumberRaw ?? "").trim(), 10);
+
+      const sale_date = parseSaleDate(saleDateRaw);
+      const sale_time = parseHHMMToTime(saleTimeRaw);
+
+      console.log(`Processing row ${processed}: Lot ${lotNumber}, VIN ${vin}`);
+
+      // If these are missing/unparseable, you cannot place the lot into a sale event with your current schema.
+      if (!Number.isFinite(lotNumber)) {
+        badCount++;
+        badVins.push(vin);
+        continue;
+      }
+
+      // ---- row-level transaction keeps tables consistent per row ----
+      await db.sequelize.transaction(async (t) => {
+        // 1) Location
+        const locKey = `${city}|${state}|${zip}|${country}`;
+        let location_id = locationCache.get(locKey);
+        if (!location_id) {
+          const [loc] = await db.Location.findOrCreate({
+            where: { city, state, zip, country },
+            defaults: { city, state, zip, country },
+            transaction: t,
+          });
+          location_id = loc.location_id;
+          locationCache.set(locKey, location_id);
+        }
+
+        // 2) Yard
+        let yard_id = yardCache.get(yardNumber);
+        if (!yard_id) {
+          const [yard, yardCreated] = await db.Yard.findOrCreate({
+            where: { yard_number: yardNumber },
+            defaults: { yard_number: yardNumber, yard_name: yardName, location_id },
+            transaction: t,
+          });
+
+          // keep yard location/name fresh if it changes
+          if (!yardCreated) {
+            const updatesToApply = {};
+            if (yard.yard_name !== yardName && yardName) updatesToApply.yard_name = yardName;
+            if (yard.location_id !== location_id && location_id) updatesToApply.location_id = location_id;
+            if (Object.keys(updatesToApply).length) await yard.update(updatesToApply, { transaction: t });
           }
 
-          var makeObj = {
-            make_code: vArray[11].toLowerCase().replace(/\s+/g, "-"),
-            make_name: vArray[11],
-          };
+          yard_id = yard.yard_id;
+          yardCache.set(yardNumber, yard_id);
+        }
 
-          var modelObj = {
-            make_id: makeId,
-            model_code: vArray[12].toLowerCase().replace(/\s+/g, "-"),
-            model_name: vArray[12],
-          };
-
-          db.Make.findOrCreate({
-            where: { make_name: vArray[11] },
-            defaults: makeObj,
-          }).catch(function (err) {
-            resp.write(
-              "<p>Failed to save " + makeObj.make_name + " data to the db</p>"
-            );
-            console.log(err);
-          });
-
-          db.Model.findOrCreate({
-            where: {
-              make_id: makeId,
-              model_name: vArray[12],
+        // 3) SaleEvent
+        const seKey = `${yard_id}|${sale_date}|${sale_time}|${timeZone}`;
+        let sale_event_id = saleEventCache.get(seKey);
+        if (!sale_event_id) {
+          const [saleEvent] = await db.SaleEvent.findOrCreate({
+            where: { yard_id, sale_date, sale_time, time_zone: timeZone },
+            defaults: {
+              yard_id,
+              sale_date,
+              sale_time,
+              time_zone: timeZone,
+              day_of_week: dayOfWeek || "",
             },
-            defaults: modelObj,
-          }).catch(function (err) {
-            resp.write(
-              "<p>Failed to save " + modelObj.model_name + " data to the db</p>"
-            );
-            console.log(err);
+            transaction: t,
           });
 
-          //console.log(vArray);
-          var vehicleObj = {
-            model_id: modelId,
-            make_id: makeId,
-            year: parseFloat(vArray[10]),
-            Make: vArray[11],
-            Model_Group: vArray[12],
-            model_details: vArray[13],
-            body_style: vArray[14],
-            exterior_color: vArray[15],
-            vin: vArray[22],
-            engine_size: vArray[27],
-            drivetrain: vArray[28],
-            transmission: vArray[29],
-            fuel_type: vArray[30],
-            cylinders: vArray[31],
-            image_thumbnail_url: vArray[41],
-            image_url: vArray[46],
-            trim: vArray[47],
-          };
+          // optionally keep day_of_week updated if blank and new value arrives
+          if ((!saleEvent.day_of_week || saleEvent.day_of_week === "") && dayOfWeek) {
+            await saleEvent.update({ day_of_week: dayOfWeek }, { transaction: t });
+          }
 
-          //console.log(vehicleObj);
-          db.Vehicle.create(vehicleObj).catch(function (err) {
-            resp.write(
-              "<p>Failed to save " + vehicleObj.VIN + " data to the db</p>"
-            );
-            console.log(err);
+          sale_event_id = saleEvent.sale_event_id;
+          saleEventCache.set(seKey, sale_event_id);
+        }
+
+        // 4) Make
+        const make_code = slugify(makeName);
+        let make_id = makeCache.get(make_code);
+        if (!make_id) {
+          const [mk] = await db.Make.findOrCreate({
+            where: { make_code },
+            defaults: { make_code, make_name: makeName, is_active: true },
+            transaction: t,
           });
+          make_id = mk.make_id;
+          makeCache.set(make_code, make_id);
+        }
 
-          resp.write(
-            "<p>" + vehicleObj.VIN + " has been saved to the database.</p>"
-          );
-        })
-      )
-      .on("error", (err) => {
-        console.log("Error while reading file.", err.sqlMessage);
-      })
-      .on("end", () => {
-        console.log("Read File Successfull");
-        resp.write(badCount + " records were not inserted.");
+        // 5) Models
+        const model_code = slugify(modelGroup);
+        const modelKey = `${make_id}:${model_code}`;
+        let model_id = modelCache.get(modelKey);
+        if (!model_id) {
+          const [mdl] = await db.Model.findOrCreate({
+            where: { make_id, model_code },
+            defaults: {
+              make_id,
+              model_code,
+              model_name: modelGroup,
+              is_active: true,
+            },
+            transaction: t,
+          });
+          model_id = mdl.model_id;
+          modelCache.set(modelKey, model_id);
+        }
+
+        // 6) Vehicle (upsert-ish)
+        // If VIN exists, treat it as the identity; otherwise create a new vehicle per row.
+        let vehicle;
+        if (vin) {
+          const cachedVehicleId = vehicleCache.get(vin);
+          if (cachedVehicleId) {
+            vehicle = await db.Vehicle.findByPk(cachedVehicleId, { transaction: t });
+          } else {
+            vehicle = await db.Vehicle.findOne({ where: { vin }, transaction: t });
+          }
+        }
+
+        const vehiclePayload = {
+          make_id,
+          model_id,
+          year: Number.isFinite(Number(yearRaw)) ? Number.parseInt(String(yearRaw), 10) : null,
+          vin,
+          trim: row["Trim"] || null,
+          model_details: modelDetail || null,
+          body_style: row["Body Style"] || null,
+          exterior_color: row["Color"] || null,
+          // if you later get interior color, map it; CSV sample does not provide separate interior color
+          fuel_type: row["Fuel Type"] || null,
+          transmission: row["Transmission"] || null,
+          cylinders: row["Cylinders"] || null,
+          engine_size: row["Engine"] || null,
+          drivetrain: row["Drive"] || null,
+          image_thumbnail_url: thumbnailUrl || null,
+          image_url: imageUrl || null,
+        };
+
+        if (!vehicle) {
+          vehicle = await db.Vehicle.create(vehiclePayload, { transaction: t });
+          inserted++;
+        } else {
+          // keep it lightly updated (avoid overwriting with nulls)
+          const toUpdate = {};
+          for (const [k, v] of Object.entries(vehiclePayload)) {
+            if (v != null && v !== "" && vehicle[k] !== v) toUpdate[k] = v;
+          }
+          if (Object.keys(toUpdate).length) {
+            await vehicle.update(toUpdate, { transaction: t });
+            updated++;
+          }
+        }
+
+        if (vin) vehicleCache.set(vin, vehicle.vehicle_id);
+
+        // 7) VehicleImage (optional)
+        if (imageUrl) {
+          await db.VehicleImage.findOrCreate({
+            where: { vehicle_id: vehicle.vehicle_id, image_url: imageUrl },
+            defaults: {
+              vehicle_id: vehicle.vehicle_id,
+              image_url: imageUrl,
+              thumbnail_url: thumbnailUrl || null,
+              is_primary: true,
+            },
+            transaction: t,
+          });
+        }
+
+        // 8) SaleLot (upsert-ish by unique index sale_event_id + lot_number)
+        const [saleLot, saleLotCreated] = await db.SaleLot.findOrCreate({
+          where: { sale_event_id, lot_number: lotNumber },
+          defaults: {
+            sale_event_id,
+            vehicle_id: vehicle.vehicle_id,
+            lot_number: lotNumber,
+            item_number: Number.isFinite(itemNumber) ? itemNumber : 0,
+            grid_row: gridRow || null,
+            vehicle_type: vehicleType || null,
+            odometer: Number.isFinite(Number(odometer)) ? Number.parseInt(String(odometer), 10) : null,
+            sale_title_state: saleTitleState || null,
+            sale_title_type: saleTitleType || null,
+            has_keys: hasKeys || null,
+            runs_drives: isRunAndDrive || null,
+            damage_description: damageDescription || null,
+            secondary_damage: secondaryDamage || null,
+            created_at_source: createdAtSource || null,
+            last_updated_at_source: lastUpdatedAtSource || null,
+          },
+          transaction: t,
+        });
+
+        if (!saleLotCreated) {
+          const lotUpdate = {};
+          if (saleLot.vehicle_id !== vehicle.vehicle_id) lotUpdate.vehicle_id = vehicle.vehicle_id;
+          if (Number.isFinite(itemNumber) && saleLot.item_number !== itemNumber) lotUpdate.item_number = itemNumber;
+          if (gridRow && saleLot.grid_row !== gridRow) lotUpdate.grid_row = gridRow;
+          if (vehicleType && saleLot.vehicle_type !== vehicleType) lotUpdate.vehicle_type = vehicleType;
+          if (Number.isFinite(Number(odometer)) && saleLot.odometer !== Number.parseInt(String(odometer), 10)) {
+            lotUpdate.odometer = Number.parseInt(String(odometer), 10);
+          }
+          if (saleTitleState && saleLot.sale_title_state !== saleTitleState) lotUpdate.sale_title_state = saleTitleState;
+          if (saleTitleType && saleLot.sale_title_type !== saleTitleType) lotUpdate.sale_title_type = saleTitleType;
+          if (hasKeys && saleLot.has_keys !== hasKeys) lotUpdate.has_keys = hasKeys;
+          if (isRunAndDrive && saleLot.runs_drives !== isRunAndDrive) lotUpdate.runs_drives = isRunAndDrive;
+          if (damageDescription && saleLot.damage_description !== damageDescription) {
+            lotUpdate.damage_description = damageDescription;
+          }
+          if (secondaryDamage && saleLot.secondary_damage !== secondaryDamage) {
+            lotUpdate.secondary_damage = secondaryDamage;
+          }
+          if (createdAtSource && saleLot.created_at_source !== createdAtSource) lotUpdate.created_at_source = createdAtSource;
+          if (lastUpdatedAtSource && saleLot.last_updated_at_source !== lastUpdatedAtSource) lotUpdate.last_updated_at_source = lastUpdatedAtSource;
+          if (Object.keys(lotUpdate).length) await saleLot.update(lotUpdate, { transaction: t });
+        }
+
+        // 9) SaleLotOutcome (one-to-one by sale_lot_id)
+        const high_bid_amount = parseDecimal(highBidRaw);
+        const make_an_offer_eligible = parseBoolYN(makeAnOfferRaw);
+        const buy_it_now_price = parseDecimal(buyItNowRaw);
+        const estimated_retail_value = parseDecimal(estRetailRaw);
+        const repair_cost = parseDecimal(repairCostRaw);
+
+        const outcomePayload = {
+          sale_lot_id: saleLot.sale_lot_id,
+          high_bid_raw: highBidRaw || null,
+          high_bid_amount: high_bid_amount,
+          buy_it_now_price: buy_it_now_price,
+          make_an_offer_eligible: make_an_offer_eligible ?? false,
+          estimated_retail_value: estimated_retail_value,
+          repair_cost: repair_cost,
+          special_note: specialNote || null,
+          sale_status: saleStatus || null,
+          currency_code: currencyCode || null,
+        };
+
+        const existingOutcome = await db.SaleLotOutcome.findOne({
+          where: { sale_lot_id: saleLot.sale_lot_id },
+          transaction: t,
+        });
+
+        if (!existingOutcome) {
+          await db.SaleLotOutcome.create(outcomePayload, { transaction: t });
+        } else {
+          const outUpdate = {};
+          for (const [k, v] of Object.entries(outcomePayload)) {
+            // allow null updates only if you want to clear fields; here we preserve existing if new is null/empty
+            if (v != null && v !== "" && existingOutcome[k] !== v) outUpdate[k] = v;
+          }
+          if (Object.keys(outUpdate).length) await existingOutcome.update(outUpdate, { transaction: t });
+        }
       });
-  });
+    }
+
+    return res.json({
+      ok: true,
+      file: filePath,
+      processed,
+      insertedVehicles: inserted,
+      updatedVehicles: updated,
+      badCount,
+      badVins,
+      note: "badCount includes rows skipped due to missing/unparseable yard_number/lot_number/sale_date/sale_time/time_zone.",
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      ok: false,
+      error: err?.message || "Unexpected error",
+    });
+  }
+});
+
 
   app.get("/api/loadAutos", (req, resp) => {
     var badCount = 0;
@@ -930,49 +1064,66 @@ export default function (app) {
    * GET /api/makes?makeId=<uuid>,<uuid>
    * or: /api/makes?makeId=<uuid>&makeId=<uuid>
    */
-  app.get("/api/makesbyIds", async (req, res) => {
-    try {
-      const makeIds = parseMultiParam(req.query.makeId ?? req.query.makeIds);
+// Assumes you already have:
+//   const { Op } = require("sequelize");
+//   const db = require("./models");
+//
+// And helpers:
+//   parseMultiParam(value) -> string[]
+//   isUuid(value) -> boolean
 
-      if (makeIds.length === 0) {
-        return res.status(400).json({
-          error: "Query parameter 'makeId' is required (one or more UUIDs).",
-        });
-      }
+app.get("/api/makesbyIds", async (req, res) => {
+  try {
+    const makeIds = parseMultiParam(req.query.makeId ?? req.query.makeIds);
 
-      const badMakeIds = makeIds.filter((x) => !isUuid(x));
-      if (badMakeIds.length) {
-        return res.status(400).json({
-          error: "One or more makeId values are not valid UUIDs.",
-          badMakeIds,
-        });
-      }
-
-      const makes = await db.Make.findAll({
-        attributes: ["make_id", "make_code", "make_name", "is_active"],
-        where: { make_id: { [Op.in]: makeIds } },
-        raw: true,
-      });
-
-      // Preserve request order
-      const byId = new Map(makes.map((m) => [m.make_id, m]));
-      const ordered = makeIds.map((id) => byId.get(id)).filter(Boolean);
-
-      res.json({
-        meta: {
-          requested: makeIds.length,
-          returned: ordered.length,
-          missing: makeIds.filter((id) => !byId.has(id)),
-        },
-        results: ordered,
-      });
-    } catch (err) {
-      res.status(500).json({
-        error: "Failed to load makes by ids.",
-        details: err?.message ?? String(err),
+    if (makeIds.length === 0) {
+      return res.status(400).json({
+        error: "Query parameter 'makeId' is required (one or more UUIDs).",
       });
     }
-  });
+
+    const badMakeIds = makeIds.filter((x) => !isUuid(x));
+    if (badMakeIds.length) {
+      return res.status(400).json({
+        error: "One or more makeId values are not valid UUIDs.",
+        badMakeIds,
+      });
+    }
+
+    // New model: Make is the authoritative source; this is already correct.
+    // Improvements:
+    // - Use findAll w/ Op.in
+    // - Preserve request order
+    // - Optionally enforce is_active (commented out)
+    const makes = await db.Make.findAll({
+      attributes: ["make_id", "make_code", "make_name", "is_active"],
+      where: {
+        make_id: { [Op.in]: makeIds },
+        // is_active: true, // uncomment if you only want active makes returned
+      },
+      raw: true,
+    });
+
+    // Preserve request order
+    const byId = new Map(makes.map((m) => [m.make_id, m]));
+    const ordered = makeIds.map((id) => byId.get(id)).filter(Boolean);
+
+    return res.json({
+      meta: {
+        requested: makeIds.length,
+        returned: ordered.length,
+        missing: makeIds.filter((id) => !byId.has(id)),
+      },
+      results: ordered,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to load makes by ids.",
+      details: err?.message ?? String(err),
+    });
+  }
+});
+
 
   /**
    * GET /api/modelsByIds?modelId=<uuid>,<uuid>
@@ -1033,95 +1184,287 @@ export default function (app) {
     }
   });
 
-  function toIntOrNull(v) {
-    const s = String(v ?? "").trim();
-    if (!s) return null;
-    const n = Number.parseInt(s, 10);
-    return Number.isFinite(n) ? n : null;
+// --- helpers (keep near your other helpers) ---
+function parseMultiParam(v) {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.flatMap(parseMultiParam);
+  return String(v)
+    .split(",")
+    .map((s) => String(s).trim())
+    .filter(Boolean);
+}
+
+function toDecimalOrNull(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Accepts "2020-06-23", "2020-06-23T23:18:11Z", or "20200702" -> returns "YYYY-MM-DD" or null
+function parseDateYmdOrNull(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+
+  // yyyymmdd
+  if (/^\d{8}$/.test(s)) {
+    const y = s.slice(0, 4);
+    const m = s.slice(4, 6);
+    const d = s.slice(6, 8);
+    return `${y}-${m}-${d}`;
   }
 
-  app.get("/api/getVehicles", async (req, res) => {
-    try {
-      const limit = Math.min(Number(req.query.limit ?? 1000), 5000);
-      const offset = Math.max(Number(req.query.offset ?? 0), 0);
+  // ISO-ish: take first 10 chars if it looks like YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
 
-      const makeIds = parseMultiParam(req.query.makeId ?? req.query.makeIds);
-      const modelIds = parseMultiParam(req.query.modelId ?? req.query.modelIds);
+  // last-resort Date.parse
+  const ts = Date.parse(s);
+  if (!Number.isFinite(ts)) return null;
+  const dt = new Date(ts);
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(dt.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
-      const makesNamesList = await getMakesByIds(makeIds);
-      const modelsNamesList = await getModelsByIds(modelIds);
+// --- endpoint ---
+app.get("/api/getVehicles", async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 1000), 5000);
+    const offset = Math.max(Number(req.query.offset ?? 0), 0);
 
-      const fromYear = toIntOrNull(req.query.fromYear);
-      const toYearRaw = toIntOrNull(req.query.toYear);
-      const toYear = toYearRaw ?? new Date().getFullYear(); // default current year if not supplied
+    const makeIds = parseMultiParam(req.query.makeId ?? req.query.makeIds);
+    const modelIds = parseMultiParam(req.query.modelId ?? req.query.modelIds);
 
-      const vin = String(req.query.vin ?? "").trim();
+    const fromYear = toIntOrNull(req.query.fromYear);
+    const toYearRaw = toIntOrNull(req.query.toYear);
+    const toYear = toYearRaw ?? new Date().getFullYear();
 
-      // Validate UUIDs (fail fast)
-      const badMakeIds = makeIds.filter((x) => !isUuid(x));
-      const badModelIds = modelIds.filter((x) => !isUuid(x));
-      if (badMakeIds.length || badModelIds.length) {
-        return res.status(400).json({
-          error: "One or more IDs are not valid UUIDs.",
-          badMakeIds: badMakeIds.length ? badMakeIds : undefined,
-          badModelIds: badModelIds.length ? badModelIds : undefined,
-        });
-      }
+    const vin = String(req.query.vin ?? "").trim();
 
-      // Build WHERE clause
-      const where = {};
+    // NEW filters
+    const locationStates = parseMultiParam(req.query.locationState ?? req.query.state); // ex: "CA,GA"
+    const saleStatuses = parseMultiParam(req.query.saleStatus); // ex: "Pure Sale,Minimum Bid"
+    const runsDrives = parseMultiParam(req.query.runsDrives ?? req.query.runs_drives); // ex: "Run & Drive Verified"
+    const titleTypes = parseMultiParam(req.query.titleType ?? req.query.saleTitleType); // ex: "CT,RT,ST"
+    const trim = String(req.query.trim ?? "").trim(); // contains match
 
-      if (makesNamesList.length) {
-        where.Make = { [Op.in]: makesNamesList };
-      }
+    const saleDateFrom = parseDateYmdOrNull(req.query.saleDateFrom ?? req.query.saleDateStart);
+    const saleDateTo = parseDateYmdOrNull(req.query.saleDateTo ?? req.query.saleDateEnd);
 
-      if (modelsNamesList.length) {
-        where.Model_Group = { [Op.in]: modelsNamesList };
-      }
+    const odometerMin = toIntOrNull(req.query.odometerMin);
+    const odometerMax = toIntOrNull(req.query.odometerMax);
 
-      // Year range
-      if (fromYear !== null && toYear !== null) {
-        where.Year = { [Op.between]: [fromYear, toYear] };
-      } else if (fromYear !== null) {
-        where.Year = { [Op.gte]: fromYear };
-      } else if (toYear !== null) {
-        where.Year = { [Op.lte]: toYear };
-      }
+    const highBidMin = toDecimalOrNull(req.query.highBidMin);
+    const highBidMax = toDecimalOrNull(req.query.highBidMax);
 
-      // VIN contains (case-insensitive best-effort)
-      if (vin.length) {
-        // MySQL collation often makes LIKE case-insensitive already; this is fine.
-        where.VIN = { [Op.like]: `%${vin}%` };
-      }
+    const buyItNowMin = toDecimalOrNull(req.query.buyItNowMin);
+    const buyItNowMax = toDecimalOrNull(req.query.buyItNowMax);
 
-      const vehicles = await db.VehicleSale.findAll({
-        where,
-        limit,
-        offset,
-        order: [["createdAt", "DESC"]],
-      });
-
-      res.json({
-        meta: {
-          limit,
-          offset,
-          returned: vehicles.length,
-          filters: {
-            makeIds: makeIds.length ? makeIds : null,
-            modelIds: modelIds.length ? modelIds : null,
-            yearRange: { from: fromYear, to: toYear },
-            vin: vin.length ? vin : null,
-          },
-        },
-        results: vehicles,
-      });
-    } catch (err) {
-      res.status(500).json({
-        error: "Failed to load vehicles.",
-        details: err?.message ?? String(err),
+    // Validate UUIDs (existing)
+    const badMakeIds = makeIds.filter((x) => !isUuid(x));
+    const badModelIds = modelIds.filter((x) => !isUuid(x));
+    if (badMakeIds.length || badModelIds.length) {
+      return res.status(400).json({
+        error: "One or more IDs are not valid UUIDs.",
+        badMakeIds: badMakeIds.length ? badMakeIds : undefined,
+        badModelIds: badModelIds.length ? badModelIds : undefined,
       });
     }
-  });
+
+    const dialect = db.sequelize.getDialect();
+    const likeOp = dialect === "postgres" ? Op.iLike : Op.like;
+
+    // Vehicle-level filtering
+    const vehicleWhere = {};
+    if (makeIds.length) vehicleWhere.make_id = { [Op.in]: makeIds };
+    if (modelIds.length) vehicleWhere.model_id = { [Op.in]: modelIds };
+
+    if (fromYear !== null && toYear !== null) {
+      vehicleWhere.year = { [Op.between]: [fromYear, toYear] };
+    } else if (fromYear !== null) {
+      vehicleWhere.year = { [Op.gte]: fromYear };
+    } else if (toYear !== null) {
+      vehicleWhere.year = { [Op.lte]: toYear };
+    }
+
+    if (vin.length) vehicleWhere.vin = { [likeOp]: `%${vin}%` };
+    if (trim.length) vehicleWhere.trim = { [likeOp]: `%${trim}%` };
+
+    // SaleLot-level filtering (these columns live on SaleLot)
+    const saleLotWhere = {};
+    if (runsDrives.length) saleLotWhere.runs_drives = { [Op.in]: runsDrives };
+    if (titleTypes.length) saleLotWhere.sale_title_type = { [Op.in]: titleTypes };
+
+    if (odometerMin !== null && odometerMax !== null) {
+      saleLotWhere.odometer = { [Op.between]: [odometerMin, odometerMax] };
+    } else if (odometerMin !== null) {
+      saleLotWhere.odometer = { [Op.gte]: odometerMin };
+    } else if (odometerMax !== null) {
+      saleLotWhere.odometer = { [Op.lte]: odometerMax };
+    }
+
+    // SaleEvent-level filtering
+    const saleEventWhere = {};
+    if (saleDateFrom && saleDateTo) {
+      saleEventWhere.sale_date = { [Op.between]: [saleDateFrom, saleDateTo] };
+    } else if (saleDateFrom) {
+      saleEventWhere.sale_date = { [Op.gte]: saleDateFrom };
+    } else if (saleDateTo) {
+      saleEventWhere.sale_date = { [Op.lte]: saleDateTo };
+    }
+
+    // Outcome-level filtering
+    const outcomeWhere = {};
+    if (saleStatuses.length) outcomeWhere.sale_status = { [Op.in]: saleStatuses };
+
+    if (highBidMin !== null && highBidMax !== null) {
+      outcomeWhere.high_bid_amount = { [Op.between]: [highBidMin, highBidMax] };
+    } else if (highBidMin !== null) {
+      outcomeWhere.high_bid_amount = { [Op.gte]: highBidMin };
+    } else if (highBidMax !== null) {
+      outcomeWhere.high_bid_amount = { [Op.lte]: highBidMax };
+    }
+
+    if (buyItNowMin !== null && buyItNowMax !== null) {
+      outcomeWhere.buy_it_now_price = { [Op.between]: [buyItNowMin, buyItNowMax] };
+    } else if (buyItNowMin !== null) {
+      outcomeWhere.buy_it_now_price = { [Op.gte]: buyItNowMin };
+    } else if (buyItNowMax !== null) {
+      outcomeWhere.buy_it_now_price = { [Op.lte]: buyItNowMax };
+    }
+
+    // Turn includes into required joins only when we need to filter by them
+    const requireOutcome = Object.keys(outcomeWhere).length > 0;
+    const requireLocation = locationStates.length > 0;
+    const requireSaleEvent = Object.keys(saleEventWhere).length > 0; // still required true overall, but this is for clarity
+
+    const { rows, count } = await db.SaleLot.findAndCountAll({
+      limit,
+      offset,
+      distinct: true,
+      subQuery: false,
+      where: Object.keys(saleLotWhere).length ? saleLotWhere : undefined,
+      include: [
+        {
+          model: db.Vehicle,
+          required: true,
+          where: vehicleWhere,
+          attributes: [
+            "vehicle_id",
+            "vin",
+            "year",
+            "trim",
+            "model_details",
+            "body_style",
+            "exterior_color",
+            "interior_color",
+            "fuel_type",
+            "transmission",
+            "cylinders",
+            "engine_size",
+            "drivetrain",
+            "image_thumbnail_url",
+            "image_url",
+            "created_at",
+            "updated_at",
+          ],
+          include: [
+            {
+              model: db.Make,
+              as: "make",
+              required: false,
+              attributes: ["make_id", "make_code", "make_name", "is_active"],
+            },
+            {
+              model: db.Model,
+              as: "model",
+              required: false,
+              attributes: ["make_id", "model_id", "model_code", "model_name", "is_active"],
+            },
+          ],
+        },
+        {
+          model: db.SaleEvent,
+          required: true, // always required in your current behavior (a lot belongs to a sale event)
+          where: requireSaleEvent ? saleEventWhere : undefined,
+          attributes: ["sale_event_id", "sale_date", "sale_time", "time_zone", "day_of_week", "yard_id"],
+          include: [
+            {
+              model: db.Yard,
+              required: true,
+              attributes: ["yard_id", "yard_number", "yard_name", "location_id"],
+              include: [
+                {
+                  model: db.Location,
+                  required: requireLocation, // becomes inner join only when state filter is applied
+                  where: requireLocation ? { state: { [Op.in]: locationStates } } : undefined,
+                  attributes: ["location_id", "city", "state", "zip", "country"],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: db.SaleLotOutcome,
+          required: requireOutcome, // inner join only when filtering by outcome fields
+          where: requireOutcome ? outcomeWhere : undefined,
+          attributes: [
+            "sale_lot_outcome_id",
+            "sale_lot_id",
+            "high_bid_raw",
+            "high_bid_amount",
+            "buy_it_now_price",
+            "make_an_offer_eligible",
+            "estimated_retail_value",
+            "repair_cost",
+            "special_note",
+            "sale_status",
+            "currency_code",
+          ],
+        },
+      ],
+      order: [
+        [db.SaleEvent, "sale_date", "DESC"],
+        [db.SaleEvent, "sale_time", "DESC"],
+        ["lot_number", "ASC"],
+      ],
+    });
+
+    return res.json({
+      meta: {
+        limit,
+        offset,
+        returned: rows.length,
+        totalCount: typeof count === "number" ? count : undefined,
+        filters: {
+          makeIds: makeIds.length ? makeIds : null,
+          modelIds: modelIds.length ? modelIds : null,
+          yearRange: { from: fromYear, to: toYear },
+          vin: vin.length ? vin : null,
+
+          // NEW filters echoed back
+          locationStates: locationStates.length ? locationStates : null,
+          saleStatuses: saleStatuses.length ? saleStatuses : null,
+          saleDateRange: { from: saleDateFrom, to: saleDateTo },
+          runsDrives: runsDrives.length ? runsDrives : null,
+          odometerRange: { min: odometerMin, max: odometerMax },
+          highBidRange: { min: highBidMin, max: highBidMax },
+          buyItNowRange: { min: buyItNowMin, max: buyItNowMax },
+          trim: trim.length ? trim : null,
+          titleTypes: titleTypes.length ? titleTypes : null,
+        },
+      },
+      results: rows,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to load vehicles.",
+      details: err?.message ?? String(err),
+    });
+  }
+});
+
 
   // This method does Multi-Column Search
   //const { Op } = require("sequelize");
@@ -1483,66 +1826,71 @@ export default function (app) {
     }
   });
 
-  app.get("/api/vehicles/distinct/makes", async (req, res) => {
-    try {
-      const q = String(req.query.q ?? "").trim();
-      const limit = Math.min(Number(req.query.limit ?? 100), 200);
-      const offset = Math.max(Number(req.query.offset ?? 0), 0);
+// Assumes:
+//   const { Op, fn, col, where: whereFn, literal } = require("sequelize");
+//   const db = require("./models");
 
-      const dialect = db.sequelize.getDialect();
-      const likeOp = dialect === "postgres" ? Op.iLike : Op.like;
+app.get("/api/vehicles/distinct/makes", async (req, res) => {
+  try {
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.min(Number(req.query.limit ?? 1000), 2000);
+    const offset = Math.max(Number(req.query.offset ?? 0), 0);
 
-      // Base where: ignore null/empty/whitespace-only Makes
-      const where = {
-        Make: {
-          [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: "" }],
-        },
-      };
+    const dialect = db.sequelize.getDialect();
+    const likeOp = dialect === "postgres" ? Op.iLike : Op.like;
 
-      // Optional q filter
-      if (q.length > 0) {
-        // Use TRIM(Make) LIKE '%q%'
-        // If you want case-insensitive on non-Postgres, consider storing a normalized column or using LOWER().
-        where.Make = {
-          [Op.and]: [
-            { [Op.ne]: null },
-            { [Op.ne]: "" },
-            { [likeOp]: `%${q}%` },
-          ],
-        };
-      }
+    // We now pull distinct makes from Makes (not Vehicles.Make)
+    // Only return active makes (common pattern in your schema).
+    const where = {
+      make_code: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: "" }] },
+      is_active: true,
+    };
 
-      const rows = await db.Vehicle.findAll({
-        attributes: [[fn("DISTINCT", col("Make")), "Make"]],
-        where,
-        order: [[col("Make"), "ASC"]],
-        //limit,
-        offset,
-        raw: true,
-      });
-
-      // Normalize: trim, drop empties, de-dupe (defensive)
-      const makes = Array.from(
-        new Set(
-          rows
-            .map((r) => (r.Make ?? "").toString().trim())
-            .filter((m) => m.length > 0)
-        )
-      );
-
-      return res.json({
-        rowCount: makes.length,
-        results: makes,
-        limit,
-        offset,
-      });
-    } catch (err) {
-      return res.status(500).json({
-        error: "Failed to load distinct makes.",
-        details: err?.message ?? String(err),
-      });
+    if (q.length > 0) {
+      // Search across make_name OR make_code
+      // - Postgres iLike works as expected
+      // - For MySQL, LIKE is usually case-insensitive depending on collation
+      where[Op.or] = [
+        { make_name: { [likeOp]: `%${q}%` } },
+        { make_code: { [likeOp]: `%${q}%` } },
+      ];
     }
-  });
+
+    const { rows, count } = await db.Make.findAndCountAll({
+      attributes: ["make_name"], // return names; can also include make_code if your UI needs it
+      where,
+      order: [[col("make_name"), "ASC"]],
+      limit,
+      offset,
+      raw: true,
+      distinct: true,
+    });
+
+    // Defensive normalize + de-dupe
+    const makes = Array.from(
+      new Set(
+        rows
+          .map((r) => (r.make_name ?? "").toString().trim())
+          .filter((m) => m.length > 0)
+      )
+    );
+
+    return res.json({
+      rowCount: makes.length,
+      // totalCount is useful for paging UIs; count may be dialect-dependent.
+      totalCount: typeof count === "number" ? count : undefined,
+      results: makes,
+      limit,
+      offset,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      error: "Failed to load distinct makes.",
+      details: err?.message ?? String(err),
+    });
+  }
+});
+
 
   // GET /api/vehicles/distinct/models?make=HONDA,TOYOTA&fromYear=2018&toYear=2026&q=AC
   // Returns buckets keyed by Make, with distinct Model_Group values per make.
@@ -1773,7 +2121,9 @@ export default function (app) {
       const modelIds = parseMultiParam(req.query.modelId ?? req.query.modelIds);
 
       const makes = getMakesByIds(makeIds);
-      const models = getModelsByIds(modelIds);
+      if(modelIds.length > 0) {
+        const models = getModelsByIds(modelIds);
+      }
 
       if (makeIds.length === 0) {
         return res.status(400).json({
@@ -1976,4 +2326,112 @@ export default function (app) {
       });
     }
   });
+
+  /**
+   * GET /api/vehicle/:vehicleId
+   * Optional: ?saleLotId=123
+   */
+  app.get("/api/vehicle/:vehicleId", async (req, res) => {
+    try {
+      const vehicleId = String(req.params.vehicleId ?? "").trim();
+      if (!vehicleId) {
+        return res.status(400).json({ error: "vehicleId is required." });
+      }
+
+      const saleLotIdRaw = req.query.saleLotId;
+      const saleLotId =
+        saleLotIdRaw === undefined || saleLotIdRaw === null || saleLotIdRaw === ""
+          ? null
+          : Number(saleLotIdRaw);
+
+      if (saleLotId !== null && !Number.isFinite(saleLotId)) {
+        return res.status(400).json({ error: "saleLotId must be a number." });
+      }
+
+      const vehicle = await db.Vehicle.findByPk(vehicleId, {
+        include: [
+          { model: db.Make, as: "make", required: false },
+          { model: db.Model, as: "model", required: false },
+          { model: db.VehicleImage, as: "VehicleImages", required: false },
+          {
+            model: db.SaleLot,
+            as: "SaleLots",
+            required: false,
+            include: [
+              { model: db.SaleLotOutcome, required: false },
+              {
+                model: db.SaleEvent,
+                required: false,
+                include: [
+                  {
+                    model: db.Yard,
+                    required: false,
+                    include: [{ model: db.Location, required: false }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+
+      if (!vehicle) {
+        return res.status(404).json({ error: "Vehicle not found." });
+      }
+
+      const saleLots = Array.isArray(vehicle.SaleLots)
+        ? vehicle.SaleLots
+        : vehicle.SaleLots || [];
+
+      // choose primary lot
+      let primaryLot = null;
+      if (saleLotId !== null) {
+        primaryLot = saleLots.find((l) => Number(l.sale_lot_id) === saleLotId) || null;
+      }
+
+      if (!primaryLot && saleLots.length) {
+        const toTs = (lot) => {
+          const se = lot.SaleEvent;
+          const d = se?.sale_date ? String(se.sale_date) : "";
+          const t = se?.sale_time ? String(se.sale_time) : "00:00:00";
+          const ts = d ? Date.parse(`${d}T${t}`) : NaN;
+          if (Number.isFinite(ts)) return ts;
+
+          const alt = lot.last_updated_at_source || lot.created_at_source;
+          const altTs = alt ? Date.parse(String(alt)) : NaN;
+          return Number.isFinite(altTs) ? altTs : 0;
+        };
+
+        primaryLot = [...saleLots].sort((a, b) => toTs(b) - toTs(a))[0] ?? null;
+      }
+
+      const images = vehicle.VehicleImages || [];
+      const primaryImage = images.find((i) => i.is_primary) || images[0] || null;
+
+      // Response shape is explicit and stable
+      return res.json({
+        vehicle,
+        make: vehicle.make ?? null,
+        model: vehicle.model ?? null,
+        images,
+        primaryImage,
+        saleLots,
+        primaryLot,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({
+        error: "Failed to load vehicle details.",
+        details: err?.message ?? String(err),
+      });
+    }
+  });
+
+function hasValue(x) {
+  return x !== null && x !== undefined && String(x).trim() !== "";
+}
+
+
+
+
 }
